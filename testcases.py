@@ -11,12 +11,12 @@ import tempfile
 from datetime import timedelta
 from enum import Enum, IntEnum
 from trace import (
-    QUIC_V2,
     Direction,
     PacketType,
     TraceAnalyzer,
     get_direction,
     get_packet_type,
+    QUIC_V2,
 )
 from typing import List
 
@@ -26,6 +26,10 @@ from result import TestResult
 
 KB = 1 << 10
 MB = 1 << 20
+
+# Config section
+BANDWIDTH = 50
+DELAY = 15
 
 QUIC_DRAFT = 34  # draft-34
 QUIC_VERSION = hex(0x1)
@@ -1555,8 +1559,13 @@ class MeasurementGoodput(Measurement):
         return "G"
 
     @staticmethod
+    def scenario() -> str:
+        """Scenario for the ns3 simulator"""
+        return f"simple-p2p --delay={DELAY}ms --bandwidth={BANDWIDTH}Mbps --queue=25"
+
+    @staticmethod
     def desc():
-        return "Measures connection goodput over a 10Mbps link."
+        return f"Measures connection goodput over a {BANDWIDTH}Mbps link."
 
     @staticmethod
     def repetitions() -> int:
@@ -1608,11 +1617,16 @@ class MeasurementCrossTraffic(MeasurementGoodput):
 
     @staticmethod
     def desc():
-        return "Measures goodput over a 10Mbps link when competing with a TCP (cubic) connection."
+        return f"Measures goodput over a {BANDWIDTH}Mbps link when competing with a TCP (cubic) connection."
 
     @staticmethod
     def timeout() -> int:
         return 180
+
+    @staticmethod
+    def scenario() -> str:
+        """Scenario for the ns3 simulator"""
+        return f"simple-p2p --delay={DELAY}ms --bandwidth={BANDWIDTH}Mbps --queue=25"
 
     @staticmethod
     def additional_envs() -> List[str]:

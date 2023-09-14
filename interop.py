@@ -19,6 +19,46 @@ import testcases
 from result import TestResult
 from testcases import Perspective
 
+# quiche
+params = {
+    "quiche": {
+        "cc": {
+            "cmd": "--cc-algorithm",
+            "options": {"bbr": "bbr", "cubic": "cubic", "reno": "reno"},
+            "default": "cubic",
+        }
+    },
+    "lsquic": {
+        "cc": {
+            "cmd": "-o cc_algo=",
+            "options": {"cubic": "1", "bbr": "2", "adaptive": "3"},
+            "default": "adaptive",
+        },
+        "cc_rtt_refresh": {
+            "cmd": "-o CC_RTT_THRESH=",
+            "default": 1500,
+        },
+        "max_data_server": {
+            "cmd": "-o MAX_DATA_SERVER=",
+            "default": (3 * 1024 * 1024 / 2),
+        },
+        "max_data_client": {
+            "cmd": "-o MAX_DATA_CLIENT=",
+            "default": (15 * 1024 * 1024),
+        },
+        "max_stream_data_server": {
+            "cmd": "-o MAX_STREAM_DATA_UNI_SERVER=",
+            "default": (12 * 1024),
+        },
+        "max_stream_data_client": {
+            "cmd": "-o MAX_STREAM_DATA_UNI_CLIENT=",
+            "default": (32 * 1024),
+        },
+    },
+}
+# SERVER_PARAMS = "--cc-algorithm bbr"
+CLIENT_PARAMS = ""
+
 
 def random_string(length: int):
     """Generate a random string of fixed length"""
@@ -355,6 +395,16 @@ class InteropRunner:
             'VERSION="' + testcases.QUIC_VERSION + '" '
         ).format(testcase.scenario())
         params += " ".join(testcase.additional_envs())
+
+        # Config
+        params += (
+            'SERVER_PARAMS="'
+            + SERVER_PARAMS
+            + '" CLIENT_PARAMS="'
+            + CLIENT_PARAMS
+            + '"'
+        )
+
         containers = "sim client server " + " ".join(testcase.additional_containers())
         cmd = (
             params
