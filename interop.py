@@ -19,12 +19,11 @@ import testcases
 from result import TestResult
 from testcases import Perspective
 
-# quiche
 params = {
     "quiche": {
         "cc": {
             "cmd": "--cc-algorithm",
-            "options": {"bbr": "bbr", "cubic": "cubic", "reno": "reno"},
+            "options": {"bbr": "bbr", "bbr2": "bbr2", "cubic": "cubic", "reno": "reno"},
             "default": "cubic",
         }
     },
@@ -56,7 +55,7 @@ params = {
         },
     },
 }
-# SERVER_PARAMS = "--cc-algorithm bbr"
+SERVER_PARAMS = "--help"
 CLIENT_PARAMS = ""
 
 
