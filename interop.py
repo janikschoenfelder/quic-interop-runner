@@ -57,8 +57,6 @@ params = {
         },
     },
 }
-# SERVER_PARAMS = ""
-# CLIENT_PARAMS = ""
 
 
 def random_string(length: int):
@@ -497,6 +495,7 @@ class InteropRunner:
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
         values = []
+        output = []
         # for i in range(0, test.repetitions()):
         counter = 1
         for i in range(0, len(cc_params)):
@@ -517,8 +516,14 @@ class InteropRunner:
                     res.result = result
                     res.details = ""
                     return res
-                values.append(cc_params[i] + "-" + cc_params[j] + ": " + str(value) + " kbps")
+                output.append(
+                    cc_params[i] + "-" + cc_params[j] + ": " + str(value) + " kbps"
+                )
+                values.append(value)
 
+        logging.debug("------------")
+        logging.debug(output)
+        logging.debug("------------")
         logging.debug(values)
         res = MeasurementResult()
         res.result = TestResult.SUCCEEDED
