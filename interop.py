@@ -19,6 +19,8 @@ import testcases
 from result import TestResult
 from testcases import Perspective
 
+cc_params = ["bbr", "bbr2", "cubic", "reno"]
+
 params = {
     "quiche": {
         "cc": {
@@ -55,8 +57,8 @@ params = {
         },
     },
 }
-SERVER_PARAMS = "--help"
-CLIENT_PARAMS = ""
+# SERVER_PARAMS = ""
+# CLIENT_PARAMS = ""
 
 
 def random_string(length: int):
@@ -349,6 +351,8 @@ class InteropRunner:
         client: str,
         log_dir_prefix: None,
         test: Callable[[], testcases.TestCase],
+        server_params: str,
+        client_params: str,
     ) -> Tuple[TestResult, float]:
         start_time = datetime.now()
         sim_log_dir = tempfile.TemporaryDirectory(dir="/tmp", prefix="logs_sim_")
@@ -398,9 +402,9 @@ class InteropRunner:
         # Config
         params += (
             'SERVER_PARAMS="'
-            + SERVER_PARAMS
+            + server_params
             + '" CLIENT_PARAMS="'
-            + CLIENT_PARAMS
+            + client_params
             + '"'
         )
 
@@ -493,14 +497,27 @@ class InteropRunner:
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
         values = []
-        for i in range(0, test.repetitions()):
-            result, value = self._run_test(server, client, "%d" % (i + 1), test)
-            if result != TestResult.SUCCEEDED:
-                res = MeasurementResult()
-                res.result = result
-                res.details = ""
-                return res
-            values.append(value)
+        # for i in range(0, test.repetitions()):
+        counter = 1
+        for i in range(0, len(cc_params)):
+            for j in range(0, len(cc_params)):
+                result, value = self._run_test(
+                    server,
+                    client,
+                    "%d" % counter,
+                    test,
+                    "--cc-algorithm " + cc_params[i],
+                    "--cc-algorithm " + cc_params[j],
+                )
+
+                counter += 1
+
+                if result != TestResult.SUCCEEDED:
+                    res = MeasurementResult()
+                    res.result = result
+                    res.details = ""
+                    return res
+                values.append(cc_params[i] + "-" + cc_params[j] + ": " + str(value) + " kbps")
 
         logging.debug(values)
         res = MeasurementResult()
