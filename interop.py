@@ -10,16 +10,51 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime
+from math import trunc
 from typing import Callable, List, Tuple
 
 import prettytable
-from termcolor import colored
-
 import testcases
 from result import TestResult
+from termcolor import colored
 from testcases import Perspective
 
 cc_params = ["bbr", "bbr2", "cubic", "reno"]
+config_quiche = [
+    {
+        "cmd": "--cc-algorithm",
+        "options": ["bbr", "bbr2", "cubic", "reno"],
+        "default": "cubic",
+    },
+    {
+        "cmd": "--max-data",
+        "default": 10000000,
+    },
+    {
+        "cmd": "--max-window",
+        "default": 25165824,
+    },
+    {
+        "cmd": "--max-stream-data",
+        "default": 1000000,
+    },
+    {
+        "cmd": "--max-stream-window",
+        "default": 16777216,
+    },
+    {
+        "cmd": "--max-streams-bidi",
+        "default": 100,
+    },
+    {
+        "cmd": "--max-streams-uni",
+        "default": 100,
+    },
+    {
+        "cmd": "--initial-cwnd-packets",
+        "default": 10,
+    },
+]
 
 params = {
     "quiche": {
@@ -491,35 +526,115 @@ class InteropRunner:
 
         return status, value
 
+    # def generate_options(entry):
+    #     if "options" in entry:
+    #         return [f"{entry['cmd']} {opt}" for opt in entry["options"]]
+    #     else:
+    #         default = entry["default"]
+    #         return [
+    #             f"{entry['cmd']} {default}",
+    #             f"{entry['cmd']} {default * 1.1}",
+    #             f"{entry['cmd']} {default * 1.21}",
+    #         ]
+
     def _run_measurement(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
         values = []
         output = []
-        # for i in range(0, test.repetitions()):
         counter = 1
-        for i in range(0, len(cc_params)):
-            for j in range(0, len(cc_params)):
-                result, value = self._run_test(
-                    server,
-                    client,
-                    "%d" % counter,
-                    test,
-                    "--cc-algorithm " + cc_params[i],
-                    "--cc-algorithm " + cc_params[j],
-                )
 
-                counter += 1
+        # all_combinations = [self.generate_options(entry) for entry in config_quiche]
+        # total_combinations = list(product(*all_combinations, repeat=2))
 
-                if result != TestResult.SUCCEEDED:
-                    res = MeasurementResult()
-                    res.result = result
-                    res.details = ""
-                    return res
-                output.append(
-                    cc_params[i] + "-" + cc_params[j] + ": " + str(value) + " kbps"
-                )
-                values.append(value)
+        optimal_values = {}
+
+        # Einzeln optimieren
+        for config in config_quiche:
+            cmd = config["cmd"]
+            best_value = None
+            best_result = None
+
+            if "options" in config:
+                for option in config["options"]:
+                    for client_option in config["options"]:
+                        result, value = self._run_test(
+                            server,
+                            client,
+                            "%d" % counter,
+                            test,
+                            cmd + " " + str(option),
+                            cmd + " " + str(client_option),
+                        )
+
+                        if result != TestResult.SUCCEEDED:
+                            res = MeasurementResult()
+                            res.result = result
+                            res.details = ""
+                            return res
+
+                        values.append(value)
+                        counter += 1
+
+                        if best_value is None or value > best_value:
+                            best_value = value
+                            best_result = (
+                                option,
+                                client_option,
+                            )
+
+            else:
+                values_to_test = [config["default"]]
+                values_to_test.append(
+                    trunc(config["default"] * 0.9)
+                )  # um 10% verringern
+                values_to_test.append(trunc(config["default"] * 1.10))  # um 10% erhöhen
+
+                for val in values_to_test:
+                    for client_val in values_to_test:
+                        result, value = self._run_test(
+                            server,
+                            client,
+                            "%d" % counter,
+                            test,
+                            cmd + " " + str(val),
+                            cmd + " " + str(client_val),
+                        )
+
+                        if result != TestResult.SUCCEEDED:
+                            res = MeasurementResult()
+                            res.result = result
+                            res.details = ""
+                            return res
+
+                        values.append(value)
+                        counter += 1
+
+                        if best_value is None or value > best_value:
+                            best_value = value
+                            best_result = (val, client_val)
+
+            output.append(f"{best_result[0]} - {best_result[1]}: {best_value} kbps")
+            optimal_values[cmd] = best_result
+
+        # Optimas kombinieren
+        combined_cmd_server = [
+            f"{cmd} {str(optimal_values[cmd][0])}" for cmd in optimal_values
+        ]
+        combined_cmd_client = [
+            f"{cmd} {str(optimal_values[cmd][1])}" for cmd in optimal_values
+        ]
+
+        combined_cmd_s = " ".join(combined_cmd_server)
+        combined_cmd_c = " ".join(combined_cmd_client)
+
+        logging.debug("------------")
+        logging.debug(combined_cmd_server)
+        logging.debug("--")
+        logging.debug(combined_cmd_client)
+        logging.debug("------------")
+
+        # result, value = self._run_test(server, client, "%d" % counter, test, combined_cmd_s, combined_cmd_c)
 
         logging.debug("------------")
         logging.debug(output)
