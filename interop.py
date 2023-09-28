@@ -501,6 +501,7 @@ class InteropRunner:
             table_str = table.get_string()
             separator = "-" * len(table_str.splitlines()[0])
             formatted_test = f"Test #{test['counter']}\n{table_str}\nGoodput: {test['goodput']} kbps\n{separator}\n\n"
+
             # Besten Goodput überprüfen
             if test["goodput"] > best_goodput:
                 best_goodput = test["goodput"]
@@ -508,15 +509,15 @@ class InteropRunner:
             parsed_results.append(formatted_test)
 
         for test_result in parsed_results:
-            print(test_result)
+            logging.debug(test_result)
 
-        # If you wish to save the table to a file
+        # All results
         with open(self._log_dir + "/all_results.txt", "w") as f:
             f.write("".join(parsed_results))
 
-        # Speichern Sie nur den besten Test in einer separaten Datei
+        # Best result
         with open(self._log_dir + "/best_result.txt", "w") as f:
-            f.write(best_test)
+            f.write(best_test + ("\nRun took: %s", datetime.now() - self._start_time))
 
     def _run_measurement(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
@@ -575,14 +576,14 @@ class InteropRunner:
             output_tables.append(
                 {"commands": commands, "goodput": value, "counter": counter}
             )
-            
+
             values.append(value)
             counter += 1
             return value
 
         # optimize
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=3)
+        study.optimize(objective, n_trials=200)
 
         best_params = study.best_params
         best_metric = study.best_value
@@ -590,12 +591,12 @@ class InteropRunner:
         # export results
         self._export_my_results(output_tables)
 
-        print("----------------")
-        print("Best parameters:")
-        print(best_params)
-        print("--")
-        print(best_metric)
-        print("----------------")
+        logging.debug("----------------")
+        logging.debug("Best parameters:")
+        logging.debug(best_params)
+        logging.debug("--")
+        logging.debug(best_metric)
+        logging.debug("----------------")
 
         return best_params, best_metric
 
