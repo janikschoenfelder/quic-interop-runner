@@ -2,3 +2,4 @@ pycryptodome
 termcolor
 prettytable
 pyshark
+optuna

@@ -12,51 +12,48 @@ import tempfile
 from datetime import datetime
 from typing import Callable, List, Tuple
 
+import optuna
 import prettytable
-from termcolor import colored
-
 import testcases
 from result import TestResult
+from termcolor import colored
 from testcases import Perspective
 
-cc_params = ["bbr", "bbr2", "cubic", "reno"]
-
-params = {
-    "quiche": {
-        "cc": {
-            "cmd": "--cc-algorithm",
-            "options": {"bbr": "bbr", "bbr2": "bbr2", "cubic": "cubic", "reno": "reno"},
-            "default": "cubic",
-        }
+config_quiche = [
+    {
+        "cmd": "--cc-algorithm",
+        "options": ["bbr", "bbr2", "cubic", "reno"],
+        "default": "cubic",
     },
-    "lsquic": {
-        "cc": {
-            "cmd": "-o cc_algo=",
-            "options": {"cubic": "1", "bbr": "2", "adaptive": "3"},
-            "default": "adaptive",
-        },
-        "cc_rtt_refresh": {
-            "cmd": "-o CC_RTT_THRESH=",
-            "default": 1500,
-        },
-        "max_data_server": {
-            "cmd": "-o MAX_DATA_SERVER=",
-            "default": (3 * 1024 * 1024 / 2),
-        },
-        "max_data_client": {
-            "cmd": "-o MAX_DATA_CLIENT=",
-            "default": (15 * 1024 * 1024),
-        },
-        "max_stream_data_server": {
-            "cmd": "-o MAX_STREAM_DATA_UNI_SERVER=",
-            "default": (12 * 1024),
-        },
-        "max_stream_data_client": {
-            "cmd": "-o MAX_STREAM_DATA_UNI_CLIENT=",
-            "default": (32 * 1024),
-        },
+    {
+        "cmd": "--max-data",
+        "default": 10000000,
     },
-}
+    {
+        "cmd": "--max-window",
+        "default": 25165824,
+    },
+    {
+        "cmd": "--max-stream-data",
+        "default": 1000000,
+    },
+    {
+        "cmd": "--max-stream-window",
+        "default": 16777216,
+    },
+    {
+        "cmd": "--max-streams-bidi",
+        "default": 100,
+    },
+    {
+        "cmd": "--max-streams-uni",
+        "default": 100,
+    },
+    {
+        "cmd": "--initial-cwnd-packets",
+        "default": 10,
+    },
+]
 
 
 def random_string(length: int):
@@ -495,42 +492,81 @@ class InteropRunner:
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
         values = []
-        output = []
-        # for i in range(0, test.repetitions()):
         counter = 1
-        for i in range(0, len(cc_params)):
-            for j in range(0, len(cc_params)):
-                result, value = self._run_test(
-                    server,
-                    client,
-                    "%d" % counter,
-                    test,
-                    "--cc-algorithm " + cc_params[i],
-                    "--cc-algorithm " + cc_params[j],
-                )
 
-                counter += 1
+        # Definieren Sie die Objective-Funktion für Optuna
+        def objective(trial):
+            nonlocal counter
+            server_cmd_parts = []
+            client_cmd_parts = []
 
-                if result != TestResult.SUCCEEDED:
-                    res = MeasurementResult()
-                    res.result = result
-                    res.details = ""
-                    return res
-                output.append(
-                    cc_params[i] + "-" + cc_params[j] + ": " + str(value) + " kbps"
-                )
-                values.append(value)
+            for config in config_quiche:
+                cmd = config["cmd"]
+                if "options" in config:
+                    option_server = trial.suggest_categorical(
+                        f"{cmd}_server", config["options"]
+                    )
+                    option_client = trial.suggest_categorical(
+                        f"{cmd}_client", config["options"]
+                    )
+                    server_cmd_parts.append(f"{cmd} {option_server}")
+                    client_cmd_parts.append(f"{cmd} {option_client}")
 
-        logging.debug("------------")
-        logging.debug(output)
-        logging.debug("------------")
-        logging.debug(values)
-        res = MeasurementResult()
-        res.result = TestResult.SUCCEEDED
-        res.details = "{:.0f} (± {:.0f}) {}".format(
-            statistics.mean(values), statistics.stdev(values), test.unit()
-        )
-        return res
+                else:
+                    default_val = config["default"]
+                    low = int(default_val * 0.8)
+                    high = int(default_val * 1.2)
+                    value_server = trial.suggest_int(f"{cmd}_server", low, high)
+                    value_client = trial.suggest_int(f"{cmd}_client", low, high)
+                    server_cmd_parts.append(f"{cmd} {value_server}")
+                    client_cmd_parts.append(f"{cmd} {value_client}")
+
+            server_cmd = " ".join(server_cmd_parts)
+            client_cmd = " ".join(client_cmd_parts)
+
+            result, value = self._run_test(
+                server,
+                client,
+                f"{counter}",
+                test,
+                server_cmd,
+                client_cmd,
+            )
+
+            values.append(value)
+
+            counter += 1
+
+            return value
+
+        # Erstellen Sie einen Study-Objekt und führen Sie die Optimierung aus.
+        study = optuna.create_study(
+            direction="maximize"
+        )  # 'minimize' oder 'maximize' je nach Ihrem Ziel.
+        study.optimize(objective, n_trials=10)
+
+        best_params = study.best_params
+        best_metric = study.best_value
+
+        print("----------------")
+        print("Best parameters:")
+        print(best_params)
+        print("--")
+        print(best_metric)
+        print("----------------")
+
+        return best_params, best_metric
+
+        # Drucke das beste Ergebnis
+        # print("Best parameters:")
+        # print(res.x)
+
+        # res = MeasurementResult()
+        # res.result = TestResult.SUCCEEDED
+        # res.details = "{:.0f} (± {:.0f}) {}".format(
+        #     statistics.mean(values), statistics.stdev(values), test.unit()
+        # )
+        # return res
 
     def run(self):
         """run the interop test suite and output the table"""
