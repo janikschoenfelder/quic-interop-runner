@@ -488,18 +488,49 @@ class InteropRunner:
 
         return status, value
 
+    def _export_my_results(self, all_results):
+        columns = ["Command", "Server", "Client"]
+        parsed_results = []
+        best_goodput = 0
+        best_test = None
+        for idx, test in enumerate(all_results):
+            table = prettytable.PrettyTable(columns)
+            table.align = "l"
+            for command in test["commands"]:
+                table.add_row([command["cmd"], command["server"], command["client"]])
+            table_str = table.get_string()
+            separator = "-" * len(table_str.splitlines()[0])
+            formatted_test = f"Test #{test['counter']}\n{table_str}\nGoodput: {test['goodput']} kbps\n{separator}\n\n"
+            # Besten Goodput überprüfen
+            if test["goodput"] > best_goodput:
+                best_goodput = test["goodput"]
+                best_test = formatted_test
+            parsed_results.append(formatted_test)
+
+        for test_result in parsed_results:
+            print(test_result)
+
+        # If you wish to save the table to a file
+        with open(self._log_dir + "/all_results.txt", "w") as f:
+            f.write("".join(parsed_results))
+
+        # Speichern Sie nur den besten Test in einer separaten Datei
+        with open(self._log_dir + "/best_result.txt", "w") as f:
+            f.write(best_test)
+
     def _run_measurement(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
         values = []
-        counter = 1
+        counter = 0
+        output_tables = []
 
-        # Definieren Sie die Objective-Funktion für Optuna
+        # objective for optuna
         def objective(trial):
             nonlocal counter
-            server_cmd_parts = []
-            client_cmd_parts = []
+            commands = []
 
+            # vary every config
             for config in config_quiche:
                 cmd = config["cmd"]
                 if "options" in config:
@@ -509,8 +540,9 @@ class InteropRunner:
                     option_client = trial.suggest_categorical(
                         f"{cmd}_client", config["options"]
                     )
-                    server_cmd_parts.append(f"{cmd} {option_server}")
-                    client_cmd_parts.append(f"{cmd} {option_client}")
+                    commands.append(
+                        {"cmd": cmd, "server": option_server, "client": option_client}
+                    )
 
                 else:
                     default_val = config["default"]
@@ -518,12 +550,18 @@ class InteropRunner:
                     high = int(default_val * 1.2)
                     value_server = trial.suggest_int(f"{cmd}_server", low, high)
                     value_client = trial.suggest_int(f"{cmd}_client", low, high)
-                    server_cmd_parts.append(f"{cmd} {value_server}")
-                    client_cmd_parts.append(f"{cmd} {value_client}")
+                    commands.append(
+                        {"cmd": cmd, "server": value_server, "client": value_client}
+                    )
 
-            server_cmd = " ".join(server_cmd_parts)
-            client_cmd = " ".join(client_cmd_parts)
+            # join variations together to one command for server + client respectively
+            server_cmd = ""
+            client_cmd = ""
+            for config in commands:
+                server_cmd += f" {config['cmd']} {config['server']}"
+                client_cmd += f" {config['cmd']} {config['client']}"
 
+            # run the test
             result, value = self._run_test(
                 server,
                 client,
@@ -533,20 +571,24 @@ class InteropRunner:
                 client_cmd,
             )
 
+            # prepare for output
+            output_tables.append(
+                {"commands": commands, "goodput": value, "counter": counter}
+            )
+            
             values.append(value)
-
             counter += 1
-
             return value
 
-        # Erstellen Sie einen Study-Objekt und führen Sie die Optimierung aus.
-        study = optuna.create_study(
-            direction="maximize"
-        )  # 'minimize' oder 'maximize' je nach Ihrem Ziel.
-        study.optimize(objective, n_trials=10)
+        # optimize
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=3)
 
         best_params = study.best_params
         best_metric = study.best_value
+
+        # export results
+        self._export_my_results(output_tables)
 
         print("----------------")
         print("Best parameters:")
