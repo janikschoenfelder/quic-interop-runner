@@ -1637,6 +1637,20 @@ class MeasurementCrossTraffic(MeasurementGoodput):
         return ["iperf_server", "iperf_client"]
 
 
+class MeasurementQuicOptimization(MeasurementGoodput):
+    @staticmethod
+    def name():
+        return "quic_params"
+
+    @staticmethod
+    def abbreviation():
+        return "QP"
+
+    @staticmethod
+    def desc():
+        return f"Measures goodput over a {BANDWIDTH}Mbps link and tries to maximize it by varying most performance-affecting parameters."
+
+
 TESTCASES = [
     TestCaseHandshake,
     TestCaseTransfer,
@@ -1667,4 +1681,5 @@ TESTCASES = [
 MEASUREMENTS = [
     MeasurementGoodput,
     MeasurementCrossTraffic,
+    MeasurementQuicOptimization,
 ]

@@ -523,6 +523,27 @@ class InteropRunner:
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
         values = []
+        for i in range(0, test.repetitions()):
+            result, value = self._run_test(server, client, "%d" % (i + 1), test)
+            if result != TestResult.SUCCEEDED:
+                res = MeasurementResult()
+                res.result = result
+                res.details = ""
+                return res
+            values.append(value)
+
+        logging.debug(values)
+        res = MeasurementResult()
+        res.result = TestResult.SUCCEEDED
+        res.details = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(values), statistics.stdev(values), test.unit()
+        )
+        return res
+
+    def _run_quic_optimization(
+        self, server: str, client: str, test: Callable[[], testcases.Measurement]
+    ) -> MeasurementResult:
+        values = []
         counter = 0
         output_tables = []
 
@@ -531,9 +552,10 @@ class InteropRunner:
             nonlocal counter
             commands = []
 
-            # vary every config
             for config in config_quiche:
                 cmd = config["cmd"]
+
+                # if there are options, vary them
                 if "options" in config:
                     option_server = trial.suggest_categorical(
                         f"{cmd}_server", config["options"]
@@ -545,6 +567,7 @@ class InteropRunner:
                         {"cmd": cmd, "server": option_server, "client": option_client}
                     )
 
+                # otherwise vary integer in range default +- 20%
                 else:
                     default_val = config["default"]
                     low = int(default_val * 0.8)
@@ -599,17 +622,6 @@ class InteropRunner:
         logging.debug("----------------")
 
         return best_params, best_metric
-
-        # Drucke das beste Ergebnis
-        # print("Best parameters:")
-        # print(res.x)
-
-        # res = MeasurementResult()
-        # res.result = TestResult.SUCCEEDED
-        # res.details = "{:.0f} (± {:.0f}) {}".format(
-        #     statistics.mean(values), statistics.stdev(values), test.unit()
-        # )
-        # return res
 
     def run(self):
         """run the interop test suite and output the table"""
