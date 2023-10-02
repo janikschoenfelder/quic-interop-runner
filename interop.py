@@ -488,37 +488,6 @@ class InteropRunner:
 
         return status, value
 
-    def _export_my_results(self, all_results):
-        columns = ["Command", "Server", "Client"]
-        parsed_results = []
-        best_goodput = 0
-        best_test = None
-        for idx, test in enumerate(all_results):
-            table = prettytable.PrettyTable(columns)
-            table.align = "l"
-            for command in test["commands"]:
-                table.add_row([command["cmd"], command["server"], command["client"]])
-            table_str = table.get_string()
-            separator = "-" * len(table_str.splitlines()[0])
-            formatted_test = f"Test #{test['counter']}\n{table_str}\nGoodput: {test['goodput']} kbps\n{separator}\n\n"
-
-            # Besten Goodput überprüfen
-            if test["goodput"] > best_goodput:
-                best_goodput = test["goodput"]
-                best_test = formatted_test
-            parsed_results.append(formatted_test)
-
-        for test_result in parsed_results:
-            logging.debug(test_result)
-
-        # All results
-        with open(self._log_dir + "/all_results.txt", "w") as f:
-            f.write("".join(parsed_results))
-
-        # Best result
-        with open(self._log_dir + "/best_result.txt", "w") as f:
-            f.write(best_test + ("\nRun took: %s", datetime.now() - self._start_time))
-
     def _run_measurement(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
@@ -539,6 +508,35 @@ class InteropRunner:
             statistics.mean(values), statistics.stdev(values), test.unit()
         )
         return res
+
+    def _export_quic_optimization(self, all_results):
+        columns = ["Command", "Server", "Client"]
+        parsed_results = []
+        best_goodput = 0
+        best_test = None
+        for idx, test in enumerate(all_results):
+            table = prettytable.PrettyTable(columns)
+            table.align = "l"
+            for command in test["commands"]:
+                table.add_row([command["cmd"], command["server"], command["client"]])
+            table_str = table.get_string()
+            separator = "-" * len(table_str.splitlines()[0])
+            formatted_test = f"Test #{test['counter']}\n\n{table_str}\nGoodput: {test['goodput']} kbps\n{separator}\n\n"
+
+            # Besten Goodput überprüfen
+            if test["goodput"] > best_goodput:
+                best_goodput = test["goodput"]
+                best_test = formatted_test
+            parsed_results.append(formatted_test)
+
+        # All results
+        with open(self._log_dir + "/all_results.txt", "w") as f:
+            f.write("".join(parsed_results))
+
+        # Best result
+        with open(self._log_dir + "/best_result.txt", "w") as f:
+            test_time = datetime.now() - self._start_time
+            f.write(best_test + f"Run took: {test_time}")
 
     def _run_quic_optimization(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
@@ -595,33 +593,48 @@ class InteropRunner:
                 client_cmd,
             )
 
+            counter += 1
+
+            if result != TestResult.SUCCEEDED:
+                res = MeasurementResult()
+                res.result = result
+                res.details = ""
+                return res
+
             # prepare for output
             output_tables.append(
                 {"commands": commands, "goodput": value, "counter": counter}
             )
 
             values.append(value)
-            counter += 1
+
             return value
 
         # optimize
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=200)
+        study.optimize(objective, n_trials=2)
 
         best_params = study.best_params
-        best_metric = study.best_value
+        best_value = study.best_value
 
         # export results
-        self._export_my_results(output_tables)
+        self._export_quic_optimization(output_tables)
 
-        logging.debug("----------------")
-        logging.debug("Best parameters:")
-        logging.debug(best_params)
-        logging.debug("--")
-        logging.debug(best_metric)
-        logging.debug("----------------")
+        logging.debug(values)
 
-        return best_params, best_metric
+        res = MeasurementResult()
+        res.result = TestResult.SUCCEEDED
+        # res.details = "Best test achieved: {:.0f} {}. All tests statistics: {:.0f} (± {:.0f}) {}".format(
+        #     best_value,
+        #     test.unit(),
+        #     statistics.mean(values),
+        #     statistics.stdev(values),
+        #     test.unit(),
+        # )
+        res.details = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(values), statistics.stdev(values), test.unit()
+        )
+        return res
 
     def run(self):
         """run the interop test suite and output the table"""
@@ -652,7 +665,10 @@ class InteropRunner:
 
                 # run the measurements
                 for measurement in self._measurements:
-                    res = self._run_measurement(server, client, measurement)
+                    if measurement.abbreviation() == "QP":
+                        res = self._run_quic_optimization(server, client, measurement)
+                    else:
+                        res = self._run_measurement(server, client, measurement)
                     self.measurement_results[server][client][measurement] = res
 
         self._print_results()
