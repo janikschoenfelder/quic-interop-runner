@@ -11,17 +11,16 @@ import tempfile
 from datetime import timedelta
 from enum import Enum, IntEnum
 from trace import (
+    QUIC_V2,
     Direction,
     PacketType,
     TraceAnalyzer,
     get_direction,
     get_packet_type,
-    QUIC_V2,
 )
 from typing import List
 
 from Crypto.Cipher import AES
-
 from result import TestResult
 
 KB = 1 << 10

@@ -1,5 +1,4 @@
 import logging
-
 from threading import Thread
 from typing import Union
 from uuid import uuid4
