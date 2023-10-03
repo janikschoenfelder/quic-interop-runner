@@ -44,6 +44,7 @@ def run_interop(job_id):
             debug=True,
             log_dir="",
             save_files=False,
+            parameters={}
         ).run()
 
     except Exception as e:
@@ -61,23 +62,25 @@ def read_root():
 
 @app.post("/start_interop")
 async def start_interop():
-    # Eindeutige Job-ID erstellen
+    # check if running qir
     for job in job_status:
         if job_status[job] != "completed":
             raise HTTPException(
                 status_code=400, detail="Interop runner is already running"
             )
+
+    # unique id
     job_id = str(uuid4())
     logging.debug(job_id)
-    job_status[job_id] = "running"
-    # InteropRunner in separatem Thread starten
+
+    # start QIR in thread
     Thread(target=run_interop, args=(job_id,)).start()
+    job_status[job_id] = "running"
     return {"status": "Interop runner started", "job_id": job_id}
 
 
 @app.get("/interop_status/{job_id}")
 async def get_interop_status(job_id: str):
-    # Jobstatus abrufen
     status = job_status.get(job_id)
     if status is None:
         raise HTTPException(status_code=404, detail="Job not found")

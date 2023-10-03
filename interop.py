@@ -87,6 +87,7 @@ class InteropRunner:
     _output = ""
     _log_dir = ""
     _save_files = False
+    _parameters = {}
 
     def __init__(
         self,
@@ -99,6 +100,7 @@ class InteropRunner:
         debug: bool,
         save_files=False,
         log_dir="",
+        parameters={},
     ):
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
@@ -117,6 +119,7 @@ class InteropRunner:
         self._output = output
         self._log_dir = log_dir
         self._save_files = save_files
+        self._parameters = parameters
         if len(self._log_dir) == 0:
             self._log_dir = "logs_{:%Y-%m-%dT%H:%M:%S}".format(self._start_time)
         if os.path.exists(self._log_dir):
