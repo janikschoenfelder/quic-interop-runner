@@ -14,6 +14,65 @@ app = FastAPI()
 
 job_status = {}
 
+parameters2 = {
+    "--cc-algorithm": {
+        "values": ["bbr", "bbr2", "cubic", "reno"],
+        "type": "categorical",
+        "for": "server",
+        "default": "cubic",
+    },
+}
+parameters = {
+    "--cc-algorithm": {
+        "values": ["bbr", "bbr2", "cubic", "reno"],
+        "type": "categorical",
+        "for": "both",
+        "default": "cubic",
+    },
+    "--max-data": {
+        "default": 10000000,
+        "type": "integer",
+        "range": [10000000 * 0.8, 10000000 * 1.2],
+        "for": "both",
+    },
+    "--max-window": {
+        "default": 25165824,
+        "type": "integer",
+        "range": [25165824 * 0.8, 25165824 * 1.2],
+        "for": "both",
+    },
+    "--max-stream-data": {
+        "default": 1000000,
+        "type": "integer",
+        "range": [1000000 * 0.8, 1000000 * 1.2],
+        "for": "both",
+    },
+    "--max-stream-window": {
+        "default": 16777216,
+        "type": "integer",
+        "range": [16777216 * 0.8, 16777216 * 1.2],
+        "for": "both",
+    },
+    "--max-streams-bidi": {
+        "default": 100,
+        "type": "integer",
+        "range": [100 * 0.8, 100 * 1.2],
+        "for": "both",
+    },
+    "--max-streams-uni": {
+        "default": 100,
+        "type": "integer",
+        "range": [100 * 0.8, 100 * 1.2],
+        "for": "both",
+    },
+    "--initial-cwnd-packets": {
+        "default": 10,
+        "type": "integer",
+        "range": [10 * 0.8, 10 * 1.2],
+        "for": "both",
+    },
+}
+
 # class InteropConfig(BaseModel):
 #     name: str
 #     description: str | None = None
@@ -44,7 +103,7 @@ def run_interop(job_id):
             debug=True,
             log_dir="",
             save_files=False,
-            parameters={}
+            parameters=parameters2,
         ).run()
 
     except Exception as e:

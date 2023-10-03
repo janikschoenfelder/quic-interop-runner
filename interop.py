@@ -553,47 +553,81 @@ class InteropRunner:
             nonlocal counter
             commands = []
 
-            for config in config_quiche:
-                cmd = config["cmd"]
+            # iterate over config dictionary
+            for param_cmd, param_info in self._parameters.items():
+                # add flag
+                cmd_info = {"cmd": param_cmd}
 
-                # if there are options, vary them
-                if "options" in config:
-                    option_server = trial.suggest_categorical(
-                        f"{cmd}_server", config["options"]
-                    )
-                    option_client = trial.suggest_categorical(
-                        f"{cmd}_client", config["options"]
-                    )
-                    commands.append(
-                        {"cmd": cmd, "server": option_server, "client": option_client}
-                    )
+                # categorical variation
+                if param_info["type"] == "categorical":
+                    # server part
+                    if param_info["for"] in ["server", "both"]:
+                        # generate variation
+                        option_server = trial.suggest_categorical(
+                            f"{param_cmd}_server", param_info["values"]
+                        )
 
-                # otherwise vary integer in range default +- 20%
-                else:
-                    default_val = config["default"]
-                    low = int(default_val * 0.8)
-                    high = int(default_val * 1.2)
-                    value_server = trial.suggest_int(f"{cmd}_server", low, high)
-                    value_client = trial.suggest_int(f"{cmd}_client", low, high)
-                    commands.append(
-                        {"cmd": cmd, "server": value_server, "client": value_client}
-                    )
+                        # add command value
+                        cmd_info["server"] = option_server
 
-            # join variations together to one command for server + client respectively
+                    # client part
+                    if param_info["for"] in ["client", "both"]:
+                        # generate variation
+                        option_client = trial.suggest_categorical(
+                            f"{param_cmd}_client", param_info["values"]
+                        )
+
+                        # add command value
+                        cmd_info["client"] = option_client
+
+                # integer variation
+                elif param_info["type"] == "integer":
+                    low, high = param_info["range"]
+
+                    # server part
+                    if param_info["for"] in ["server", "both"]:
+                        # generate variation
+                        value_server = trial.suggest_int(
+                            f"{param_cmd}_server", low, high
+                        )
+
+                        # add command value
+                        cmd_info["server"] = value_server
+
+                    # client part
+                    if param_info["for"] in ["client", "both"]:
+                        # generate variation
+                        value_client = trial.suggest_int(
+                            f"{param_cmd}_client", low, high
+                        )
+
+                        # add command value
+                        cmd_info["client"] = value_client
+
+                # add command to list of all commands only if it has server or client values
+                if "server" in cmd_info or "client" in cmd_info:
+                    commands.append(cmd_info)
+
+            # join variations together to one separate server & client command respectively
             server_cmd = ""
             client_cmd = ""
             for config in commands:
-                server_cmd += f" {config['cmd']} {config['server']}"
-                client_cmd += f" {config['cmd']} {config['client']}"
+                # add only if present
+                if "server" in config:
+                    server_cmd += f" {config['cmd']} {config['server']}"
 
-            # run the test
+                # add only if present
+                if "client" in config:
+                    client_cmd += f" {config['cmd']} {config['client']}"
+
+            # run the test (strip removes leading or following whitespaces)
             result, value = self._run_test(
                 server,
                 client,
                 f"{counter}",
                 test,
-                server_cmd,
-                client_cmd,
+                server_cmd.strip(),
+                client_cmd.strip(),
             )
 
             counter += 1
