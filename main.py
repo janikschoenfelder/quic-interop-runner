@@ -1,3 +1,5 @@
+import logging
+
 from threading import Thread
 from typing import Union
 from uuid import uuid4
@@ -44,11 +46,12 @@ def run_interop(job_id):
             save_files=False,
         ).run()
 
-        job_status[job_id] = "completed"
-
     except Exception as e:
         # Optional: Fügen Sie Fehlerlogging hier hinzu
         print(f"Error running InteropRunner: {str(e)}")
+
+    finally:
+        job_status[job_id] = "completed"
 
 
 @app.get("/")
@@ -59,7 +62,13 @@ def read_root():
 @app.post("/start_interop")
 async def start_interop():
     # Eindeutige Job-ID erstellen
+    for job in job_status:
+        if job_status[job] != "completed":
+            raise HTTPException(
+                status_code=400, detail="Interop runner is already running"
+            )
     job_id = str(uuid4())
+    logging.debug(job_id)
     job_status[job_id] = "running"
     # InteropRunner in separatem Thread starten
     Thread(target=run_interop, args=(job_id,)).start()
