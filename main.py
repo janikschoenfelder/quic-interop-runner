@@ -13,15 +13,79 @@ app = FastAPI()
 
 job_status = {}
 
-parameters2 = {
-    "--cc-algorithm": {
-        "values": ["bbr", "bbr2", "cubic", "reno"],
+opt_servers = [
+    # "lsquic",
+    "quiche"
+]
+opt_clients = [
+    # "lsquic",
+    "quiche"
+]
+
+ls_params = {
+    "-o cc_algo": {
+        "values": [
+            0,
+            1,
+            2,
+            3,
+        ],  # 0: use default (adaptive), 1: cubic, 2: bbr1, 3: adaptive
         "type": "categorical",
-        "for": "server",
-        "default": "cubic",
+        "for": "both",
+        "default": 0,
+    },
+    "-o cfcw": {
+        "default": 16384,
+        "type": "integer",
+        "range": [16384, 16384 * 2 * 2 * 2],
+        "for": "both",
+    },
+    "-o sfcw": {
+        "default": 16384,
+        "type": "integer",
+        "range": [16384, 16384 * 2 * 2 * 2],
+        "for": "both",
+    },
+    "-o init_max_data": {
+        "default": 10000000,
+        "type": "integer",
+        "range": [10000000, 10000000 * 1.6],
+        "for": "both",
+    },
+    "-o max_cfcw": {
+        "default": 25165824,
+        "type": "integer",
+        "range": [25165824 * 0.8, 25165824 * 0.8],
+        "for": "both",
+    },
+    "-o max_sfcw": {
+        "default": 16777216,
+        "type": "integer",
+        "range": [16384, 16384 * 2 * 2 * 2],
+        "for": "both",
+    },
+    "-o init_max_streams_bidi": {
+        "default": 100,
+        "type": "integer",
+        "range": [100 * 0.8, 100 * 1.2],
+        "for": "both",
+    },
+    "-o init_max_streams_uni": {
+        "default": 100,
+        "type": "integer",
+        "range": [100 * 0.8, 100 * 1.2],
+        "for": "both",
+    },
+    "-o init_cwnd": {
+        "default": 10,
+        "type": "integer",
+        "range": [10 * 0.8, 10 * 1.2],
+        "for": "both",
     },
 }
-parameters = {
+
+
+quiche_params = {
     "--cc-algorithm": {
         "values": ["bbr", "bbr2", "cubic", "reno"],
         "type": "categorical",
@@ -31,7 +95,7 @@ parameters = {
     "--max-data": {
         "default": 10000000,
         "type": "integer",
-        "range": [10000000 * 0.8, 10000000 * 1.2],
+        "range": [10000000, 16 * 1024 * 1024],
         "for": "both",
     },
     "--max-window": {
@@ -43,13 +107,13 @@ parameters = {
     "--max-stream-data": {
         "default": 1000000,
         "type": "integer",
-        "range": [1000000 * 0.8, 1000000 * 1.2],
+        "range": [1000000 * 0.7, 2000000],
         "for": "both",
     },
     "--max-stream-window": {
         "default": 16777216,
         "type": "integer",
-        "range": [16777216 * 0.8, 16777216 * 1.2],
+        "range": [16777216 * 0.7, 16777216 * 1.3],
         "for": "both",
     },
     "--max-streams-bidi": {
@@ -94,15 +158,15 @@ def run_interop(job_id):
 
         InteropRunner(
             implementations=implementations,
-            servers=["quiche"],
-            clients=["quiche"],
+            servers=opt_servers,
+            clients=opt_clients,
             tests=[],
             measurements=[quic_measurement],
             output="output.json",
             debug=True,
             log_dir="",
             save_files=False,
-            parameters=parameters2,
+            parameters={"lsquic": ls_params, "quiche": quiche_params},
         ).run()
 
     except Exception as e:
