@@ -19,42 +19,6 @@ from result import TestResult
 from termcolor import colored
 from testcases import Perspective
 
-config_quiche = [
-    {
-        "cmd": "--cc-algorithm",
-        "options": ["bbr", "bbr2", "cubic", "reno"],
-        "default": "cubic",
-    },
-    {
-        "cmd": "--max-data",
-        "default": 10000000,
-    },
-    {
-        "cmd": "--max-window",
-        "default": 25165824,
-    },
-    {
-        "cmd": "--max-stream-data",
-        "default": 1000000,
-    },
-    {
-        "cmd": "--max-stream-window",
-        "default": 16777216,
-    },
-    {
-        "cmd": "--max-streams-bidi",
-        "default": 100,
-    },
-    {
-        "cmd": "--max-streams-uni",
-        "default": 100,
-    },
-    {
-        "cmd": "--initial-cwnd-packets",
-        "default": 10,
-    },
-]
-
 
 def random_string(length: int):
     """Generate a random string of fixed length"""
@@ -554,7 +518,7 @@ class InteropRunner:
             commands = []
 
             # iterate over config dictionary
-            for param_cmd, param_info in self._parameters.items():
+            for param_cmd, param_info in self._parameters[server].items():
                 # add flag
                 cmd_info = {"cmd": param_cmd}
 
@@ -570,18 +534,8 @@ class InteropRunner:
                         # add command value
                         cmd_info["server"] = option_server
 
-                    # client part
-                    if param_info["for"] in ["client", "both"]:
-                        # generate variation
-                        option_client = trial.suggest_categorical(
-                            f"{param_cmd}_client", param_info["values"]
-                        )
-
-                        # add command value
-                        cmd_info["client"] = option_client
-
                 # integer variation
-                elif param_info["type"] == "integer":
+                if param_info["type"] == "integer":
                     low, high = param_info["range"]
 
                     # server part
@@ -594,6 +548,30 @@ class InteropRunner:
                         # add command value
                         cmd_info["server"] = value_server
 
+                # add command to list of all commands only if it has server or client values
+                if "server" in cmd_info:
+                    commands.append(cmd_info)
+
+            for param_cmd, param_info in self._parameters[client].items():
+                # add flag
+                cmd_info = {"cmd": param_cmd}
+
+                # categorical variation
+                if param_info["type"] == "categorical":
+                    # client part
+                    if param_info["for"] in ["client", "both"]:
+                        # generate variation
+                        option_client = trial.suggest_categorical(
+                            f"{param_cmd}_client", param_info["values"]
+                        )
+
+                        # add command value
+                        cmd_info["client"] = option_client
+
+                # integer variation
+                if param_info["type"] == "integer":
+                    low, high = param_info["range"]
+
                     # client part
                     if param_info["for"] in ["client", "both"]:
                         # generate variation
@@ -605,7 +583,7 @@ class InteropRunner:
                         cmd_info["client"] = value_client
 
                 # add command to list of all commands only if it has server or client values
-                if "server" in cmd_info or "client" in cmd_info:
+                if "client" in cmd_info:
                     commands.append(cmd_info)
 
             # join variations together to one separate server & client command respectively
@@ -614,11 +592,17 @@ class InteropRunner:
             for config in commands:
                 # add only if present
                 if "server" in config:
-                    server_cmd += f" {config['cmd']} {config['server']}"
+                    if server == "lsquic":
+                        server_cmd += f" {config['cmd']}={config['server']}"
+                    elif server == "quiche":
+                        server_cmd += f" {config['cmd']} {config['server']}"
 
                 # add only if present
                 if "client" in config:
-                    client_cmd += f" {config['cmd']} {config['client']}"
+                    if client == "lsquic":
+                        client_cmd += f" {config['cmd']}={config['client']}"
+                    elif client == "quiche":
+                        client_cmd += f" {config['cmd']} {config['client']}"
 
             # run the test (strip removes leading or following whitespaces)
             result, value = self._run_test(
