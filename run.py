@@ -57,7 +57,7 @@ def main():
             "-l",
             "--log-dir",
             help="log directory",
-            default="logs",
+            default="",
         )
         parser.add_argument(
             "-f", "--save-files", help="save downloaded files if a test fails"

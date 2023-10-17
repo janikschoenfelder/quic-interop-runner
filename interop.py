@@ -19,6 +19,120 @@ from result import TestResult
 from termcolor import colored
 from testcases import Perspective
 
+opt_params = {
+    "quiche": {
+        "--cc-algorithm": {
+            "values": ["bbr", "bbr2", "cubic", "reno"],
+            "type": "categorical",
+            "for": "both",
+            "default": "cubic",
+        },
+        "--max-data": {
+            "default": 10000000,
+            "type": "integer",
+            "range": [10000000, 16 * 1024 * 1024],
+            "for": "both",
+        },
+        "--max-window": {
+            "default": 25165824,
+            "type": "integer",
+            "range": [25165824 * 0.8, 25165824 * 1.2],
+            "for": "both",
+        },
+        "--max-stream-data": {
+            "default": 1000000,
+            "type": "integer",
+            "range": [1000000 * 0.7, 2000000],
+            "for": "both",
+        },
+        "--max-stream-window": {
+            "default": 16777216,
+            "type": "integer",
+            "range": [16777216 * 0.7, 16777216 * 1.3],
+            "for": "both",
+        },
+        "--max-streams-bidi": {
+            "default": 100,
+            "type": "integer",
+            "range": [100 * 0.8, 100 * 1.2],
+            "for": "both",
+        },
+        "--max-streams-uni": {
+            "default": 100,
+            "type": "integer",
+            "range": [100 * 0.8, 100 * 1.2],
+            "for": "both",
+        },
+        "--initial-cwnd-packets": {
+            "default": 10,
+            "type": "integer",
+            "range": [10 * 0.8, 10 * 1.2],
+            "for": "both",
+        },
+    },
+    "lsquic": {
+        "-o cc_algo": {
+            "values": [
+                0,
+                1,
+                2,
+                3,
+            ],  # 0: use default (adaptive), 1: cubic, 2: bbr1, 3: adaptive
+            "type": "categorical",
+            "for": "both",
+            "default": 0,
+        },
+        "-o cfcw": {
+            "default": 16384,
+            "type": "integer",
+            "range": [16384, 16384 * 2 * 2 * 2],
+            "for": "both",
+        },
+        "-o sfcw": {
+            "default": 16384,
+            "type": "integer",
+            "range": [16384, 16384 * 2 * 2 * 2],
+            "for": "both",
+        },
+        "-o init_max_data": {
+            "default": 10000000,
+            "type": "integer",
+            "range": [10000000, 10000000 * 1.6],
+            "for": "both",
+        },
+        "-o max_cfcw": {
+            "default": 25165824,
+            "type": "integer",
+            "range": [25165824 * 0.8, 25165824 * 0.8],
+            "for": "both",
+        },
+        "-o max_sfcw": {
+            "default": 16777216,
+            "type": "integer",
+            "range": [16384, 16384 * 2 * 2 * 2],
+            "for": "both",
+        },
+        "-o init_max_streams_bidi": {
+            "default": 100,
+            "type": "integer",
+            "range": [100 * 0.8, 100 * 1.2],
+            "for": "both",
+        },
+        "-o init_max_streams_uni": {
+            "default": 100,
+            "type": "integer",
+            "range": [100 * 0.8, 100 * 1.2],
+            "for": "both",
+        },
+        "-o init_cwnd": {
+            "default": 10,
+            "type": "integer",
+            "range": [10 * 0.8, 10 * 1.2],
+            "for": "both",
+        },
+    },
+}
+
 
 def random_string(length: int):
     """Generate a random string of fixed length"""
@@ -64,7 +178,7 @@ class InteropRunner:
         debug: bool,
         save_files=False,
         log_dir="",
-        parameters={},
+        parameters=opt_params,
     ):
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
@@ -430,9 +544,11 @@ class InteropRunner:
             log_dir = self._log_dir + "/" + server + "_" + client + "/" + str(testcase)
             if log_dir_prefix:
                 log_dir += "/" + log_dir_prefix
-            shutil.copytree(server_log_dir.name, log_dir + "/server")
-            shutil.copytree(client_log_dir.name, log_dir + "/client")
-            shutil.copytree(sim_log_dir.name, log_dir + "/sim")
+            # shutil.copytree(server_log_dir.name, log_dir + "/server")
+            # shutil.copytree(client_log_dir.name, log_dir + "/client")
+            # shutil.copytree(sim_log_dir.name, log_dir + "/sim")
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
             shutil.copyfile(log_file.name, log_dir + "/output.txt")
             if self._save_files and status == TestResult.FAILED:
                 shutil.copytree(testcase.www_dir(), log_dir + "/www")
@@ -505,6 +621,18 @@ class InteropRunner:
             test_time = datetime.now() - self._start_time
             f.write(best_test + f"Run took: {test_time}")
 
+    def _export_opt_test_result(self, commands, goodput, counter, start_time, log_dir):
+        test_time = (datetime.now() - start_time).total_seconds()
+        table = prettytable.PrettyTable(["Command", "Server", "Client"])
+        table.align = "l"
+        for command in commands:
+            table.add_row([command["cmd"], command["server"], command["client"]])
+        table_str = table.get_string()
+        output = f"Test #{counter}\n\n{table_str}\n\nRun took: {test_time}s\nGoodput: {goodput} kbps"
+
+        with open(f"{log_dir}/result.txt", "w") as f:
+            f.write(output)
+
     def _run_quic_optimization(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
@@ -514,6 +642,7 @@ class InteropRunner:
 
         # objective for optuna
         def objective(trial):
+            start_time = datetime.now()
             nonlocal counter
             commands = []
 
@@ -534,30 +663,6 @@ class InteropRunner:
                         # add command value
                         cmd_info["server"] = option_server
 
-                # integer variation
-                if param_info["type"] == "integer":
-                    low, high = param_info["range"]
-
-                    # server part
-                    if param_info["for"] in ["server", "both"]:
-                        # generate variation
-                        value_server = trial.suggest_int(
-                            f"{param_cmd}_server", low, high
-                        )
-
-                        # add command value
-                        cmd_info["server"] = value_server
-
-                # add command to list of all commands only if it has server or client values
-                if "server" in cmd_info:
-                    commands.append(cmd_info)
-
-            for param_cmd, param_info in self._parameters[client].items():
-                # add flag
-                cmd_info = {"cmd": param_cmd}
-
-                # categorical variation
-                if param_info["type"] == "categorical":
                     # client part
                     if param_info["for"] in ["client", "both"]:
                         # generate variation
@@ -572,6 +677,16 @@ class InteropRunner:
                 if param_info["type"] == "integer":
                     low, high = param_info["range"]
 
+                    # server part
+                    if param_info["for"] in ["server", "both"]:
+                        # generate variation
+                        value_server = trial.suggest_int(
+                            f"{param_cmd}_server", low, high
+                        )
+
+                        # add command value
+                        cmd_info["server"] = value_server
+
                     # client part
                     if param_info["for"] in ["client", "both"]:
                         # generate variation
@@ -583,7 +698,7 @@ class InteropRunner:
                         cmd_info["client"] = value_client
 
                 # add command to list of all commands only if it has server or client values
-                if "client" in cmd_info:
+                if "server" or "client" in cmd_info:
                     commands.append(cmd_info)
 
             # join variations together to one separate server & client command respectively
@@ -614,13 +729,24 @@ class InteropRunner:
                 client_cmd.strip(),
             )
 
-            counter += 1
-
             if result != TestResult.SUCCEEDED:
                 res = MeasurementResult()
                 res.result = result
                 res.details = ""
                 return res
+
+            log_dir = (
+                self._log_dir
+                + "/"
+                + server
+                + "_"
+                + client
+                + "/quic_params/"
+                + str(counter)
+            )
+            self._export_opt_test_result(commands, value, counter, start_time, log_dir)
+
+            counter += 1
 
             # prepare for output
             output_tables.append(
@@ -633,7 +759,7 @@ class InteropRunner:
 
         # optimize
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=2)
+        study.optimize(objective, n_trials=500)
 
         best_params = study.best_params
         best_value = study.best_value
