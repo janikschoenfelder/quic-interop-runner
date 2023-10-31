@@ -132,6 +132,15 @@ services:
       - "server46:193.167.100.110"
       - "server46:fd00:cafe:cafe:100::110"
 
+  apache:
+    image: httpd:latest
+    volumes:
+      - ./http2/my-httpd.conf:/usr/local/apache2/conf/httpd.conf
+      - ./http2/random_file:/usr/local/apache2/htdocs/
+    ports:
+      - "80:80"
+      - "443:443"
+
 networks:
   leftnet:
     driver: bridge
@@ -151,4 +160,3 @@ networks:
       config:
         - subnet: 193.167.100.0/24
         - subnet: fd00:cafe:cafe:100::/64
-

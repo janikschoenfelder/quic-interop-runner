@@ -15,6 +15,7 @@ from typing import Callable, List, Tuple
 import optuna
 import prettytable
 import testcases
+from Crypto.Cipher import AES
 from result import TestResult
 from termcolor import colored
 from testcases import Perspective
@@ -633,6 +634,62 @@ class InteropRunner:
         with open(f"{log_dir}/result.txt", "w") as f:
             f.write(output)
 
+    def _get_opt_cmds(self, server, trial):
+        commands = []
+
+        # iterate over config dictionary
+        for param_cmd, param_info in self._parameters[server].items():
+            # add flag
+            cmd_info = {"cmd": param_cmd}
+
+            # categorical variation
+            if param_info["type"] == "categorical":
+                # server part
+                if param_info["for"] in ["server", "both"]:
+                    # generate variation
+                    option_server = trial.suggest_categorical(
+                        f"{param_cmd}_server", param_info["values"]
+                    )
+
+                    # add command value
+                    cmd_info["server"] = option_server
+
+                # client part
+                if param_info["for"] in ["client", "both"]:
+                    # generate variation
+                    option_client = trial.suggest_categorical(
+                        f"{param_cmd}_client", param_info["values"]
+                    )
+
+                    # add command value
+                    cmd_info["client"] = option_client
+
+            # integer variation
+            if param_info["type"] == "integer":
+                low, high = param_info["range"]
+
+                # server part
+                if param_info["for"] in ["server", "both"]:
+                    # generate variation
+                    value_server = trial.suggest_int(f"{param_cmd}_server", low, high)
+
+                    # add command value
+                    cmd_info["server"] = value_server
+
+                # client part
+                if param_info["for"] in ["client", "both"]:
+                    # generate variation
+                    value_client = trial.suggest_int(f"{param_cmd}_client", low, high)
+
+                    # add command value
+                    cmd_info["client"] = value_client
+
+            # add command to list of all commands only if it has server or client values
+            if "server" or "client" in cmd_info:
+                commands.append(cmd_info)
+
+        return commands
+
     def _run_quic_optimization(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
@@ -644,62 +701,8 @@ class InteropRunner:
         def objective(trial):
             start_time = datetime.now()
             nonlocal counter
-            commands = []
 
-            # iterate over config dictionary
-            for param_cmd, param_info in self._parameters[server].items():
-                # add flag
-                cmd_info = {"cmd": param_cmd}
-
-                # categorical variation
-                if param_info["type"] == "categorical":
-                    # server part
-                    if param_info["for"] in ["server", "both"]:
-                        # generate variation
-                        option_server = trial.suggest_categorical(
-                            f"{param_cmd}_server", param_info["values"]
-                        )
-
-                        # add command value
-                        cmd_info["server"] = option_server
-
-                    # client part
-                    if param_info["for"] in ["client", "both"]:
-                        # generate variation
-                        option_client = trial.suggest_categorical(
-                            f"{param_cmd}_client", param_info["values"]
-                        )
-
-                        # add command value
-                        cmd_info["client"] = option_client
-
-                # integer variation
-                if param_info["type"] == "integer":
-                    low, high = param_info["range"]
-
-                    # server part
-                    if param_info["for"] in ["server", "both"]:
-                        # generate variation
-                        value_server = trial.suggest_int(
-                            f"{param_cmd}_server", low, high
-                        )
-
-                        # add command value
-                        cmd_info["server"] = value_server
-
-                    # client part
-                    if param_info["for"] in ["client", "both"]:
-                        # generate variation
-                        value_client = trial.suggest_int(
-                            f"{param_cmd}_client", low, high
-                        )
-
-                        # add command value
-                        cmd_info["client"] = value_client
-
-                # add command to list of all commands only if it has server or client values
-                if "server" or "client" in cmd_info:
-                    commands.append(cmd_info)
+            commands = self._get_opt_cmds(server, trial)
 
             # join variations together to one separate server & client command respectively
             server_cmd = ""
@@ -719,7 +722,7 @@ class InteropRunner:
                     elif client == "quiche":
                         client_cmd += f" {config['cmd']} {config['client']}"
 
-            # run the test (strip removes leading or following whitespaces)
+            # run the test
             result, value = self._run_test(
                 server,
                 client,
@@ -744,11 +747,13 @@ class InteropRunner:
                 + "/quic_params/"
                 + str(counter)
             )
+
+            # export test
             self._export_opt_test_result(commands, value, counter, start_time, log_dir)
 
             counter += 1
 
-            # prepare for output
+            # add result to all_tests output
             output_tables.append(
                 {"commands": commands, "goodput": value, "counter": counter}
             )
@@ -783,6 +788,65 @@ class InteropRunner:
         )
         return res
 
+    def _run_http2_transfer(self):
+        # generate ssl certs
+        testcases.generate_cert_chain("http2_certs")
+
+        # generate random file
+        FILESIZE = 10 * testcases.MB
+        filename = "random_file"
+        enc = AES.new(os.urandom(32), AES.MODE_OFB, b"a" * 16)
+        f = open("http2/" + filename, "wb")
+        f.write(enc.encrypt(b" " * FILESIZE))
+        f.close()
+
+        cmd = "docker-compose up -d apache"
+
+        try:
+            r = subprocess.run(
+                cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=180,
+            )
+            output = r.stdout
+        except subprocess.TimeoutExpired as ex:
+            output = ex.stdout
+            expired = True
+
+        fetch_cmd = "curl -k --http2 https://localhost"
+
+        subprocess.run
+
+        # logging.debug("%s", output.decode("utf-8"))
+
+        # if expired:
+        #     logging.debug("Test failed: took longer than %ds.", 180)
+        #     r = subprocess.run(
+        #         "docker-compose stop apache",
+        #         shell=True,
+        #         stdout=subprocess.PIPE,
+        #         stderr=subprocess.STDOUT,
+        #         timeout=60,
+        #     )
+        #     logging.debug("%s", r.stdout.decode("utf-8"))
+
+        try:
+            r = subprocess.run(
+                fetch_cmd,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=180,
+            )
+            output = r.stdout
+        except subprocess.TimeoutExpired as ex:
+            output = ex.stdout
+            expired = True
+
+        logging.debug("%s", output.decode("utf-8"))
+
     def run(self):
         """run the interop test suite and output the table"""
 
@@ -814,6 +878,7 @@ class InteropRunner:
                 for measurement in self._measurements:
                     if measurement.abbreviation() == "QP":
                         res = self._run_quic_optimization(server, client, measurement)
+                        # self._run_http2_transfer()
                     else:
                         res = self._run_measurement(server, client, measurement)
                     self.measurement_results[server][client][measurement] = res
