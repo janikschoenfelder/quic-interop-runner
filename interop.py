@@ -74,14 +74,13 @@ opt_params = {
     "lsquic": {
         "-o cc_algo": {
             "values": [
-                0,
                 1,
                 2,
                 3,
             ],  # 0: use default (adaptive), 1: cubic, 2: bbr1, 3: adaptive
             "type": "categorical",
             "for": "both",
-            "default": 0,
+            "default": 3,
         },
         "-o cfcw": {
             "default": 16384,
@@ -123,12 +122,6 @@ opt_params = {
             "default": 100,
             "type": "integer",
             "range": [100 * 0.8, 100 * 1.2],
-            "for": "both",
-        },
-        "-o init_cwnd": {
-            "default": 10,
-            "type": "integer",
-            "range": [10 * 0.8, 10 * 1.2],
             "for": "both",
         },
     },
@@ -638,7 +631,8 @@ class InteropRunner:
         commands = []
 
         # iterate over config dictionary
-        for param_cmd, param_info in self._parameters[server].items():
+        server_name = "lsquic" if server == "my-lsquic" else server
+        for param_cmd, param_info in self._parameters[server_name].items():
             # add flag
             cmd_info = {"cmd": param_cmd}
 
@@ -710,14 +704,14 @@ class InteropRunner:
             for config in commands:
                 # add only if present
                 if "server" in config:
-                    if server == "lsquic":
+                    if server == "lsquic" or server == "my-lsquic":
                         server_cmd += f" {config['cmd']}={config['server']}"
                     elif server == "quiche":
                         server_cmd += f" {config['cmd']} {config['server']}"
 
                 # add only if present
                 if "client" in config:
-                    if client == "lsquic":
+                    if client == "lsquic" or client == "my-lsquic":
                         client_cmd += f" {config['cmd']}={config['client']}"
                     elif client == "quiche":
                         client_cmd += f" {config['cmd']} {config['client']}"
@@ -764,7 +758,7 @@ class InteropRunner:
 
         # optimize
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=500)
+        study.optimize(objective, n_trials=5)
 
         best_params = study.best_params
         best_value = study.best_value
