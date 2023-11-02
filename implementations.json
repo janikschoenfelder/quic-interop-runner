@@ -14,11 +14,6 @@
     "url": "https://github.com/ngtcp2/ngtcp2",
     "role": "both"
   },
-  "quant": {
-    "image": "ntap/quant:interop",
-    "url": "https://github.com/NTAP/quant",
-    "role": "both"
-  },
   "mvfst": {
     "image": "lnicco/mvfst-qns:latest",
     "url": "https://github.com/facebookincubator/mvfst",
@@ -61,7 +56,7 @@
   },
   "chrome": {
     "image": "martenseemann/chrome-quic-interop-runner",
-    "url": "https://github.com/marten-seemann/chrome-quic-interop-runner",
+    "url": "https://github.com/quic-interop/chrome-quic-interop-runner",
     "role": "client"
   },
   "xquic": {
