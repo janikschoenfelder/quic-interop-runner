@@ -20,113 +20,6 @@ from result import TestResult
 from termcolor import colored
 from testcases import Perspective
 
-opt_params = {
-    "quiche": {
-        "--cc-algorithm": {
-            "values": ["bbr", "bbr2", "cubic", "reno"],
-            "type": "categorical",
-            "for": "both",
-            "default": "cubic",
-        },
-        "--max-data": {
-            "default": 10000000,
-            "type": "integer",
-            "range": [10000000, 16 * 1024 * 1024],
-            "for": "both",
-        },
-        "--max-window": {
-            "default": 25165824,
-            "type": "integer",
-            "range": [25165824 * 0.8, 25165824 * 1.2],
-            "for": "both",
-        },
-        "--max-stream-data": {
-            "default": 1000000,
-            "type": "integer",
-            "range": [1000000 * 0.7, 2000000],
-            "for": "both",
-        },
-        "--max-stream-window": {
-            "default": 16777216,
-            "type": "integer",
-            "range": [16777216 * 0.7, 16777216 * 1.3],
-            "for": "both",
-        },
-        "--max-streams-bidi": {
-            "default": 100,
-            "type": "integer",
-            "range": [100 * 0.8, 100 * 1.2],
-            "for": "both",
-        },
-        "--max-streams-uni": {
-            "default": 100,
-            "type": "integer",
-            "range": [100 * 0.8, 100 * 1.2],
-            "for": "both",
-        },
-        "--initial-cwnd-packets": {
-            "default": 10,
-            "type": "integer",
-            "range": [10 * 0.8, 10 * 1.2],
-            "for": "both",
-        },
-    },
-    "lsquic": {
-        "-o cc_algo": {
-            "values": [
-                1,
-                2,
-                3,
-            ],  # 0: use default (adaptive), 1: cubic, 2: bbr1, 3: adaptive
-            "type": "categorical",
-            "for": "both",
-            "default": 3,
-        },
-        "-o cfcw": {
-            "default": 16384,
-            "type": "integer",
-            "range": [16384, 16384 * 2 * 2 * 2],
-            "for": "both",
-        },
-        "-o sfcw": {
-            "default": 16384,
-            "type": "integer",
-            "range": [16384, 16384 * 2 * 2 * 2],
-            "for": "both",
-        },
-        "-o init_max_data": {
-            "default": 10000000,
-            "type": "integer",
-            "range": [10000000, 10000000 * 1.6],
-            "for": "both",
-        },
-        "-o max_cfcw": {
-            "default": 25165824,
-            "type": "integer",
-            "range": [25165824 * 0.8, 25165824 * 0.8],
-            "for": "both",
-        },
-        "-o max_sfcw": {
-            "default": 16777216,
-            "type": "integer",
-            "range": [16384, 16384 * 2 * 2 * 2],
-            "for": "both",
-        },
-        "-o init_max_streams_bidi": {
-            "default": 100,
-            "type": "integer",
-            "range": [100 * 0.8, 100 * 1.2],
-            "for": "both",
-        },
-        "-o init_max_streams_uni": {
-            "default": 100,
-            "type": "integer",
-            "range": [100 * 0.8, 100 * 1.2],
-            "for": "both",
-        },
-    },
-}
-
 
 def random_string(length: int):
     """Generate a random string of fixed length"""
@@ -159,7 +52,6 @@ class InteropRunner:
     _output = ""
     _log_dir = ""
     _save_files = False
-    _parameters = {}
 
     def __init__(
         self,
@@ -172,7 +64,6 @@ class InteropRunner:
         debug: bool,
         save_files=False,
         log_dir="",
-        parameters=opt_params,
     ):
         logger = logging.getLogger()
         logger.setLevel(logging.DEBUG)
@@ -191,7 +82,6 @@ class InteropRunner:
         self._output = output
         self._log_dir = log_dir
         self._save_files = save_files
-        self._parameters = parameters
         if len(self._log_dir) == 0:
             self._log_dir = "logs_{:%Y-%m-%dT%H:%M:%S}".format(self._start_time)
         if os.path.exists(self._log_dir):
@@ -586,7 +476,7 @@ class InteropRunner:
         )
         return res
 
-    def _export_quic_optimization(self, all_results):
+    def _export_quic_optimization(self, all_results, best_result, default_result):
         columns = ["Command", "Server", "Client"]
         parsed_results = []
         best_goodput = 0
@@ -613,7 +503,12 @@ class InteropRunner:
         # Best result
         with open(self._log_dir + "/best_result.txt", "w") as f:
             test_time = datetime.now() - self._start_time
-            f.write(best_test + f"Run took: {test_time}")
+            text = (
+                f"{best_test}Run took: {test_time}\n\n"
+                f"Mean with optimized params: {best_result}\n"
+                f"Mean with default params: {default_result}"
+            )
+            f.write(text)
 
     def _export_opt_test_result(self, commands, goodput, counter, start_time, log_dir):
         test_time = (datetime.now() - start_time).total_seconds()
@@ -629,60 +524,87 @@ class InteropRunner:
 
     def _get_opt_cmds(self, server, trial):
         commands = []
-
-        # iterate over config dictionary
         server_name = "lsquic" if server == "my-lsquic" else server
-        for param_cmd, param_info in self._parameters[server_name].items():
-            # add flag
+
+        with open(f"./opt/implementations/{server_name}.json", "r") as f:
+            config = json.load(f)
+
+        def add_variation(param_cmd, param_info, param_type):
             cmd_info = {"cmd": param_cmd}
-
-            # categorical variation
-            if param_info["type"] == "categorical":
-                # server part
-                if param_info["for"] in ["server", "both"]:
-                    # generate variation
-                    option_server = trial.suggest_categorical(
-                        f"{param_cmd}_server", param_info["values"]
+            for role in ["server", "client"]:
+                if param_info["for"] in [role, "both"]:
+                    value = (
+                        trial.suggest_categorical(
+                            f"{param_cmd}_{role}", param_info["values"]
+                        )
+                        if param_type == "categorical"
+                        else trial.suggest_int(
+                            f"{param_cmd}_{role}", *param_info["range"]
+                        )
                     )
+                    cmd_info[role] = value
+            return cmd_info if "server" in cmd_info or "client" in cmd_info else None
 
-                    # add command value
-                    cmd_info["server"] = option_server
-
-                # client part
-                if param_info["for"] in ["client", "both"]:
-                    # generate variation
-                    option_client = trial.suggest_categorical(
-                        f"{param_cmd}_client", param_info["values"]
-                    )
-
-                    # add command value
-                    cmd_info["client"] = option_client
-
-            # integer variation
-            if param_info["type"] == "integer":
-                low, high = param_info["range"]
-
-                # server part
-                if param_info["for"] in ["server", "both"]:
-                    # generate variation
-                    value_server = trial.suggest_int(f"{param_cmd}_server", low, high)
-
-                    # add command value
-                    cmd_info["server"] = value_server
-
-                # client part
-                if param_info["for"] in ["client", "both"]:
-                    # generate variation
-                    value_client = trial.suggest_int(f"{param_cmd}_client", low, high)
-
-                    # add command value
-                    cmd_info["client"] = value_client
-
-            # add command to list of all commands only if it has server or client values
-            if "server" or "client" in cmd_info:
+        for param_cmd, param_info in config.items():
+            cmd_info = add_variation(param_cmd, param_info, param_info["type"])
+            if cmd_info:
                 commands.append(cmd_info)
 
         return commands
+
+    def _compare_with_default_conf(
+        self,
+        server: str,
+        client: str,
+        test: Callable[[], testcases.Measurement],
+        server_cmd,
+        client_cmd,
+    ):
+        # best_server_cmd, best_client_cmd = params_to_cmd_strings(best_params)
+
+        best_test_values = []
+        default_test_values = []
+
+        for i in range(5):
+            default_result, default_val = self._run_test(
+                server,
+                client,
+                f"default_{i}",
+                test,
+                "",
+                "",
+            )
+
+            default_test_values.append(default_val)
+
+        for j in range(5):
+            opt_result, opt_val = self._run_test(
+                server,
+                client,
+                f"default_{j}",
+                test,
+                server_cmd,
+                client_cmd,
+            )
+
+            best_test_values.append(opt_val)
+
+        best_result = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(best_test_values),
+            statistics.stdev(best_test_values),
+            test.unit(),
+        )
+
+        default_result = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(default_test_values),
+            statistics.stdev(default_test_values),
+            test.unit(),
+        )
+
+        logging.debug("BEST RESULT\n" + best_result + "\n")
+        logging.debug("DEFAULT RESULT\n" + default_result + "\n")
+
+        return best_result, default_result
 
     def _run_quic_optimization(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
@@ -691,39 +613,33 @@ class InteropRunner:
         counter = 0
         output_tables = []
 
-        # objective for optuna
-        def objective(trial):
-            start_time = datetime.now()
-            nonlocal counter
-
-            commands = self._get_opt_cmds(server, trial)
-
-            # join variations together to one separate server & client command respectively
+        def generate_command_strings(commands, server, client):
             server_cmd = ""
             client_cmd = ""
             for config in commands:
-                # add only if present
                 if "server" in config:
-                    if server == "lsquic" or server == "my-lsquic":
+                    if server in ["lsquic", "my-lsquic"]:
                         server_cmd += f" {config['cmd']}={config['server']}"
                     elif server == "quiche":
                         server_cmd += f" {config['cmd']} {config['server']}"
 
-                # add only if present
                 if "client" in config:
-                    if client == "lsquic" or client == "my-lsquic":
+                    if client in ["lsquic", "my-lsquic"]:
                         client_cmd += f" {config['cmd']}={config['client']}"
                     elif client == "quiche":
                         client_cmd += f" {config['cmd']} {config['client']}"
 
-            # run the test
+            return server_cmd.strip(), client_cmd.strip()
+
+        def objective(trial):
+            nonlocal counter
+            start_time = datetime.now()
+            commands = self._get_opt_cmds(server, trial)
+
+            server_cmd, client_cmd = generate_command_strings(commands, server, client)
+
             result, value = self._run_test(
-                server,
-                client,
-                f"{counter}",
-                test,
-                server_cmd.strip(),
-                client_cmd.strip(),
+                server, client, str(counter), test, server_cmd, client_cmd
             )
 
             if result != TestResult.SUCCEEDED:
@@ -732,51 +648,56 @@ class InteropRunner:
                 res.details = ""
                 return res
 
-            log_dir = (
-                self._log_dir
-                + "/"
-                + server
-                + "_"
-                + client
-                + "/quic_params/"
-                + str(counter)
-            )
-
-            # export test
+            log_dir = f"{self._log_dir}/{server}_{client}/quic_params/{counter}"
             self._export_opt_test_result(commands, value, counter, start_time, log_dir)
 
-            counter += 1
-
-            # add result to all_tests output
             output_tables.append(
                 {"commands": commands, "goodput": value, "counter": counter}
             )
 
             values.append(value)
-
+            counter += 1
             return value
 
-        # optimize
+        def params_to_cmd_strings(best_params):
+            server_cmds = ""
+            client_cmds = ""
+
+            for key, value in best_params.items():
+                cmd, target = key.rsplit(
+                    "_", 1
+                )  # Trennt den letzten Teil nach dem Unterstrich ab
+                if target == "server":
+                    server_cmds += f" {cmd} {value}"
+                elif target == "client":
+                    client_cmds += f" {cmd} {value}"
+
+            return server_cmds.strip(), client_cmds.strip()
+
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=5)
+        study.optimize(objective, n_trials=2)
 
         best_params = study.best_params
-        best_value = study.best_value
+        # best_value = study.best_value
 
-        # export results
-        self._export_quic_optimization(output_tables)
+        # Let optimized params compete against default params
+        best_server_cmd, best_client_cmd = params_to_cmd_strings(best_params)
 
+        # best_server_cmd = "--cc-algorithm bbr --max-data 12829185 --max-window 28916000 --max-stream-data 829907 --max-stream-window 19856250 --max-streams-bidi 86 --max-streams-uni 112 --initial-cwnd-packets 12"
+        # best_client_cmd = "--cc-algorithm bbr --max-data 12469961 --max-window 21366335 --max-stream-data 1339680 --max-stream-window 12553325 --max-streams-bidi 80 --max-streams-uni 81 --initial-cwnd-packets 9"
+
+        # best_server_cmd = "-o cc_algo=1 -o cfcw=40304 -o sfcw=28176 -o init_max_data=13460996 -o max_cfcw=20132659 -o max_sfcw=99181 -o init_max_streams_bidi=94 -o init_max_streams_uni=102"
+        # best_client_cmd = "-o cc_algo=2 -o cfcw=94730 -o sfcw=56260 -o init_max_data=12237770 -o max_cfcw=20132659 -o max_sfcw=110821 -o init_max_streams_bidi=107 -o init_max_streams_uni=95"
+
+        best_result, default_result = self._compare_with_default_conf(
+            server, client, test, best_server_cmd, best_client_cmd
+        )
+
+        self._export_quic_optimization(output_tables, best_result, default_result)
         logging.debug(values)
 
         res = MeasurementResult()
         res.result = TestResult.SUCCEEDED
-        # res.details = "Best test achieved: {:.0f} {}. All tests statistics: {:.0f} (± {:.0f}) {}".format(
-        #     best_value,
-        #     test.unit(),
-        #     statistics.mean(values),
-        #     statistics.stdev(values),
-        #     test.unit(),
-        # )
         res.details = "{:.0f} (± {:.0f}) {}".format(
             statistics.mean(values), statistics.stdev(values), test.unit()
         )

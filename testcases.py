@@ -1,5 +1,6 @@
 import abc
 import filecmp
+import json
 import logging
 import os
 import random
@@ -10,14 +11,8 @@ import sys
 import tempfile
 from datetime import timedelta
 from enum import Enum, IntEnum
-from trace import (
-    QUIC_V2,
-    Direction,
-    PacketType,
-    TraceAnalyzer,
-    get_direction,
-    get_packet_type,
-)
+from trace import (QUIC_V2, Direction, PacketType, TraceAnalyzer,
+                   get_direction, get_packet_type)
 from typing import List
 
 from Crypto.Cipher import AES
@@ -1637,6 +1632,13 @@ class MeasurementCrossTraffic(MeasurementGoodput):
 
 
 class MeasurementQuicOptimization(MeasurementGoodput):
+    with open("./opt/config.json", "r") as f:
+        config = json.load(f)
+
+    FILESIZE = int(config["filesize"]) * (
+        KB if config.get("filesize_unit") == "KB" else MB
+    )
+
     @staticmethod
     def name():
         return "quic_params"
@@ -1645,9 +1647,18 @@ class MeasurementQuicOptimization(MeasurementGoodput):
     def abbreviation():
         return "QP"
 
-    @staticmethod
-    def desc():
-        return f"Measures goodput over a {BANDWIDTH}Mbps link and tries to maximize it by varying most performance-affecting parameters."
+    @classmethod
+    def desc(self):
+        return f"Measures goodput over a {self.config['bandwidth']}Mbps link and tries to maximize it by varying most performance-affecting parameters."
+
+    @classmethod
+    def scenario(self) -> str:
+        """Scenario for the ns3 simulator"""
+        return f"simple-p2p --delay={self.config['delay']}ms --bandwidth={self.config['bandwidth']}Mbps --queue=25"
+
+    def get_paths(self):
+        self._files = [self._generate_random_file(self.FILESIZE)]
+        return self._files
 
 
 class MeasurementHTTP2(MeasurementGoodput):

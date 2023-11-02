@@ -3,3 +3,5 @@ termcolor
 prettytable
 pyshark
 optuna
+matplotlib
+numpy
