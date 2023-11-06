@@ -11,8 +11,14 @@ import sys
 import tempfile
 from datetime import timedelta
 from enum import Enum, IntEnum
-from trace import (QUIC_V2, Direction, PacketType, TraceAnalyzer,
-                   get_direction, get_packet_type)
+from trace import (
+    QUIC_V2,
+    Direction,
+    PacketType,
+    TraceAnalyzer,
+    get_direction,
+    get_packet_type,
+)
 from typing import List
 
 from Crypto.Cipher import AES

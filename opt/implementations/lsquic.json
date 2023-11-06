@@ -1,0 +1,50 @@
+{
+  "-o cc_algo": {
+    "values": [1, 2, 3],
+    "type": "categorical",
+    "for": "both",
+    "default": 3
+  },
+  "-o cfcw": {
+    "default": 16384,
+    "type": "integer",
+    "range": [16384, 131072],
+    "for": "both"
+  },
+  "-o sfcw": {
+    "default": 16384,
+    "type": "integer",
+    "range": [16384, 131072],
+    "for": "both"
+  },
+  "-o init_max_data": {
+    "default": 10000000,
+    "type": "integer",
+    "range": [10000000, 16000000],
+    "for": "both"
+  },
+  "-o max_cfcw": {
+    "default": 25165824,
+    "type": "integer",
+    "range": [20132659, 30198988],
+    "for": "both"
+  },
+  "-o max_sfcw": {
+    "default": 16777216,
+    "type": "integer",
+    "range": [11744051, 21810380],
+    "for": "both"
+  },
+  "-o init_max_streams_bidi": {
+    "default": 100,
+    "type": "integer",
+    "range": [60, 150],
+    "for": "both"
+  },
+  "-o init_max_streams_uni": {
+    "default": 100,
+    "type": "integer",
+    "range": [60, 150],
+    "for": "both"
+  }
+}
