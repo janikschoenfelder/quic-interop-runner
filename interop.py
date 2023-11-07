@@ -762,7 +762,7 @@ class InteropRunner:
             "-s",
             "-w",
             "%{time_total}",
-            "http://172.28.1.1/",
+            "https://172.28.1.1/",
         ]
 
         times = []
@@ -785,9 +785,20 @@ class InteropRunner:
             else:
                 print(f"Error during curl command: {result.stderr}")
 
+        subprocess.run(
+            "docker-compose stop http2_client",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+        )
+
         return times
 
     def _run_http2_transfer(self, test):
+        subprocess.run("rm -rf ./http2/certs", shell=True)
+        testcases.generate_cert_chain("./http2/certs")
+
         with open("./opt/config.json", "r") as f:
             config = json.load(f)
 
@@ -841,12 +852,20 @@ class InteropRunner:
         #     f"docker exec http2_server tc filter add dev eth0 parent 1: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate 50mbit burst 10k drop flowid :1"
         # )
         subprocess.run(
-            f"docker exec quic-interop-runner_http2_server_1 tc qdisc add dev eth0 root tbf rate 50mbit latency 15ms burst 10k",
+            f"docker exec quic-interop-runner_http2_server_1 tc qdisc add dev eth0 root tbf rate {bandwidth}mbit latency {delay}ms burst 10k",
             shell=True,
         )
 
         # Führe den fetch_file Befehl 5 Mal aus und speichere die Zeiten
         times = self._fetch_file(size, unit, bandwidth, delay)
+
+        subprocess.run(
+            "docker-compose stop http2_server",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+        )
 
         logging.debug("AND HERE COME... THE TIMES\n")
         logging.debug(times)

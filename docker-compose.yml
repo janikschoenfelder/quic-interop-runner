@@ -136,6 +136,7 @@ services:
     image: janikschoenfelder/master-thesis:http2_server
     volumes:
       - ./http2/nginx.conf:/etc/nginx/nginx.conf
+      - ./http2/certs:/etc/nginx/certs:ro
       - ./http2/www:/usr/share/nginx/html
     cap_add:
       - NET_ADMIN
