@@ -149,6 +149,8 @@ services:
     image: janikschoenfelder/master-thesis:http2_client
     depends_on:
       - http2_server
+    volumes:
+      - ./http2/certs:/certs:ro
     command: >
       /bin/sh -c "
               tail -f /dev/null;

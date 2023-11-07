@@ -762,6 +762,8 @@ class InteropRunner:
             "-s",
             "-w",
             "%{time_total}",
+            "--cacert",
+            "/certs/cert.pem",
             "https://172.28.1.1/",
         ]
 
@@ -771,6 +773,9 @@ class InteropRunner:
             result = subprocess.run(curl_command, stdout=subprocess.PIPE, text=True)
             if result.returncode == 0:
                 # Konvertieren Sie die Ausgabe zu float und fügen Sie sie der Liste hinzu
+                # logging.debug("--------")
+                # logging.debug(result.stdout.strip())
+                # logging.debug("--------")
                 time_s = float(result.stdout.strip())
                 time_ms = time_s * 1000
                 goodput_bps = size * unit * 8 / time_s
