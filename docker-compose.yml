@@ -146,6 +146,10 @@ services:
     image: curlimages/curl:latest
     depends_on:
       - http2_server
+    command: >
+      /bin/sh -c "
+        tail -f /dev/null;
+      "
     networks:
       http2_net:
         ipv4_address: 172.28.1.2

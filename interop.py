@@ -614,8 +614,8 @@ class InteropRunner:
     def _run_quic_optimization(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
-        logging.debug("hallo")
-        # self._run_http2_transfer()
+        # logging.debug("hallo")
+        self._run_http2_transfer(test)
         # values = []
         # counter = 0
         # output_tables = []
@@ -710,7 +710,7 @@ class InteropRunner:
         # )
         # return res
 
-    def _fetch_file(self):
+    def _fetch_file(self, size, unit):
         expired = False
 
         try:
@@ -726,6 +726,8 @@ class InteropRunner:
             output = ex.stdout
             expired = True
 
+        logging.debug("%s", output.decode("utf-8"))
+
         if expired:
             logging.debug("Test failed: took longer than %ds.", 180)
             r = subprocess.run(
@@ -737,23 +739,57 @@ class InteropRunner:
             )
             logging.debug("%s", r.stdout.decode("utf-8"))
 
-        return output.decode("utf-8")
+        curl_command = [
+            "docker-compose",
+            "exec",
+            "-T",
+            "http2_client",
+            "curl",
+            "-o",
+            "/dev/null",
+            "-s",
+            "-w",
+            "%{time_total}",
+            "http://172.28.1.1/",
+        ]
 
-    def _run_http2_transfer(self):
+        times = []
+        for _ in range(5):
+            logging.debug("Curling...")
+            result = subprocess.run(curl_command, stdout=subprocess.PIPE, text=True)
+            if result.returncode == 0:
+                # Konvertieren Sie die Ausgabe zu float und fügen Sie sie der Liste hinzu
+                time_s = float(result.stdout.strip())
+                time_ms = time_s * 1000
+                goodput_bps = size * unit * 8 / time_s
+                goodput_kbps = goodput_bps / 1024
+                logging.debug(
+                    "Transfering %d MB took %d ms. Goodput: %d kbps",
+                    size,
+                    time_ms,
+                    goodput_kbps,
+                )
+                times.append(goodput_kbps)
+            else:
+                print(f"Error during curl command: {result.stderr}")
+
+        return times
+
+    def _run_http2_transfer(self, test):
         with open("./opt/config.json", "r") as f:
             config = json.load(f)
 
+        size = int(config["filesize"])
+        unit = testcases.KB if config.get("filesize_unit") == "KB" else testcases.MB
         # generate random file
-        FILESIZE = int(config["filesize"]) * (
-            testcases.KB if config.get("filesize_unit") == "KB" else testcases.MB
-        )
+        FILESIZE = size * unit
         directory = "http2/www/"
         os.makedirs(directory, exist_ok=True)
         filename = "random_file"
         enc = AES.new(os.urandom(32), AES.MODE_OFB, b"a" * 16)
-        f = open("./" + directory + filename, "wb")
-        f.write(enc.encrypt(b" " * FILESIZE))
-        f.close()
+        file_path = os.path.join(directory, filename)
+        with open(file_path, "wb") as f:
+            f.write(enc.encrypt(b" " * FILESIZE))
 
         expired = False
 
@@ -775,7 +811,7 @@ class InteropRunner:
         if expired:
             logging.debug("Test failed: took longer than %ds.", 180)
             r = subprocess.run(
-                "docker-compose stop apache",
+                "docker-compose stop http2_server",
                 shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -784,14 +820,17 @@ class InteropRunner:
             logging.debug("%s", r.stdout.decode("utf-8"))
 
         # Führe den fetch_file Befehl 5 Mal aus und speichere die Zeiten
-        times = [self._fetch_file() for _ in range(5)]
+        times = self._fetch_file(size, unit)
 
         logging.debug("AND HERE COME... THE TIMES\n")
         logging.debug(times)
         logging.debug("-------------------")
-        # Berechne Mittelwert und Standardabweichung
-        # mean_time = statistics.mean(times)
-        # stdev_time = statistics.stdev(times)
+
+        result = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(times), statistics.stdev(times), test.unit()
+        )
+
+        logging.debug(result)
 
     def run(self):
         """run the interop test suite and output the table"""
@@ -806,12 +845,12 @@ class InteropRunner:
                     client,
                     self._implementations[client]["image"],
                 )
-                if not (
-                    self._check_impl_is_compliant(server)
-                    and self._check_impl_is_compliant(client)
-                ):
-                    logging.info("Not compliant, skipping")
-                    continue
+                # if not (
+                #     self._check_impl_is_compliant(server)
+                #     and self._check_impl_is_compliant(client)
+                # ):
+                #     logging.info("Not compliant, skipping")
+                #     continue
 
                 # run the test cases
                 for testcase in self._tests:
