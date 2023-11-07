@@ -12,4 +12,4 @@ test.py
 *.txt
 .venv
 output.json
-/www/*
+*/www

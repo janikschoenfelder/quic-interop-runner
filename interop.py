@@ -710,7 +710,7 @@ class InteropRunner:
         # )
         # return res
 
-    def _fetch_file(self, size, unit):
+    def _fetch_file(self, size, unit, bandwidth, delay):
         expired = False
 
         try:
@@ -738,6 +738,18 @@ class InteropRunner:
                 timeout=60,
             )
             logging.debug("%s", r.stdout.decode("utf-8"))
+
+        subprocess.run(
+            "docker exec quic-interop-runner_http2_client_1 tc qdisc add dev eth0 handle 1: ingress",
+            shell=True,
+        )
+        # subprocess.run(
+        #     f"docker exec http2_client tc filter add dev eth0 parent 1: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate {bandwidth}mbit burst 10k drop flowid :1"
+        # )
+        subprocess.run(
+            f"docker exec quic-interop-runner_http2_client_1 tc qdisc add dev eth0 root tbf rate {bandwidth}mbit latency {delay}ms burst 10k",
+            shell=True,
+        )
 
         curl_command = [
             "docker-compose",
@@ -781,6 +793,8 @@ class InteropRunner:
 
         size = int(config["filesize"])
         unit = testcases.KB if config.get("filesize_unit") == "KB" else testcases.MB
+        bandwidth = int(config["bandwidth"])
+        delay = int(config["delay"])
         # generate random file
         FILESIZE = size * unit
         directory = "http2/www/"
@@ -819,8 +833,20 @@ class InteropRunner:
             )
             logging.debug("%s", r.stdout.decode("utf-8"))
 
+        subprocess.run(
+            "docker exec quic-interop-runner_http2_server_1 tc qdisc add dev eth0 handle 1: ingress",
+            shell=True,
+        )
+        # subprocess.run(
+        #     f"docker exec http2_server tc filter add dev eth0 parent 1: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate 50mbit burst 10k drop flowid :1"
+        # )
+        subprocess.run(
+            f"docker exec quic-interop-runner_http2_server_1 tc qdisc add dev eth0 root tbf rate 50mbit latency 15ms burst 10k",
+            shell=True,
+        )
+
         # Führe den fetch_file Befehl 5 Mal aus und speichere die Zeiten
-        times = self._fetch_file(size, unit)
+        times = self._fetch_file(size, unit, bandwidth, delay)
 
         logging.debug("AND HERE COME... THE TIMES\n")
         logging.debug(times)

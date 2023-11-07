@@ -133,23 +133,27 @@ services:
       - "server46:fd00:cafe:cafe:100::110"
 
   http2_server:
-    image: nginx:latest
+    image: janikschoenfelder/master-thesis:http2_server
     volumes:
       - ./http2/nginx.conf:/etc/nginx/nginx.conf
       - ./http2/www:/usr/share/nginx/html
+    cap_add:
+      - NET_ADMIN
     networks:
       http2_net:
         ipv4_address: 172.28.1.1
         ipv6_address: fd15:555::10
 
   http2_client:
-    image: curlimages/curl:latest
+    image: janikschoenfelder/master-thesis:http2_client
     depends_on:
       - http2_server
     command: >
       /bin/sh -c "
-        tail -f /dev/null;
+              tail -f /dev/null;
       "
+    cap_add:
+      - NET_ADMIN
     networks:
       http2_net:
         ipv4_address: 172.28.1.2
