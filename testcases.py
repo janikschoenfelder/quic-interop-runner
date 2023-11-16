@@ -1647,11 +1647,11 @@ class MeasurementQuicOptimization(MeasurementGoodput):
 
     @staticmethod
     def name():
-        return "quic_params"
+        return "quic_optimization"
 
     @staticmethod
     def abbreviation():
-        return "QP"
+        return "QO"
 
     @classmethod
     def desc(self):
