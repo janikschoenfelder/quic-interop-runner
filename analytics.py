@@ -72,7 +72,39 @@ def plot_combined_goodput(goodput_data, filename):
     plt.close()
 
 
-def plot_goodput_trendline(goodput_values, label, color, plot_combined=False):
+def plot_moving_average(values, label, color, window_size=50):
+    """Berechnet und plottet den gleitenden Durchschnitt über ein definiertes Fenster."""
+    cumsum = np.cumsum(np.insert(values, 0, 0))
+    ma = (cumsum[window_size:] - cumsum[:-window_size]) / float(window_size)
+    x_ma = np.arange(window_size, window_size + len(ma))
+    plt.plot(
+        x_ma,
+        ma,
+        linestyle="--",
+        linewidth=1.5,
+        color=color,
+        label=f"Gleitender Durchschnitt {label}",
+    )
+
+
+def plot_poly_fit(x, y, trendline_color, label):
+    """Berechnet Polynom 2. Grades als Trendlinie."""
+    p = Polynomial.fit(x, y, 2)
+    x_new = np.linspace(x.min(), x.max(), 100)
+    y_new = p(x_new)
+    plt.plot(
+        x_new,
+        y_new,
+        linestyle="--",
+        linewidth=1.5,
+        color=trendline_color,
+        label=f"Trendlinie {label}",
+    )
+
+
+def plot_goodput_trendline(
+    goodput_values, label, color, plot_combined=False, trendline="ma"
+):
     """Visualisiert Goodput-Werte in einem linearen Diagramm mit optionaler Trendlinie."""
     x = np.array(range(1, len(goodput_values) + 1))
     y = np.array(goodput_values)
@@ -82,11 +114,10 @@ def plot_goodput_trendline(goodput_values, label, color, plot_combined=False):
 
     trendline_color = adjust_lightness(color, 1.5)
 
-    # Polynom 2. Grades für Trendlinie
-    p = Polynomial.fit(x, y, 2)
-    x_new = np.linspace(x.min(), x.max(), 100)
-    y_new = p(x_new)
-    plt.plot(x_new, y_new, linestyle="--", linewidth=1.5, color=trendline_color)
+    if trendline == "ma":
+        plot_moving_average(goodput_values, label, trendline_color, window_size=50)
+    elif trendline == "poly":
+        plot_poly_fit(x, y, trendline_color, label)
 
 
 def generate_plots(files):
