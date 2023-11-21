@@ -18,6 +18,102 @@ def parse_goodput_from_file(filename):
         return [float(value) for value in goodput_matches]
 
 
+def plot_goodput_over_time(goodput_values, label, color, filename):
+    """Erstellt ein Liniendiagramm des Goodputs über die Zeit."""
+    plt.figure(figsize=(10, 4))
+    plot_goodput_trendline(goodput_values, label, color)
+    plt.title(f"Goodput pro Testlauf mit Trendlinie ({label})")
+    plt.xlabel("Testlauf")
+    plt.ylabel("Goodput (kbps)")
+    plt.legend()
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_boxplot(goodput_values, label, filename):
+    """Erstellt einen Box-Plot für die Goodput-Werte."""
+    plt.figure(figsize=(10, 6))
+    plt.boxplot(goodput_values, vert=True, patch_artist=True)
+    plt.title(f"Box-Plot des Goodputs ({label})")
+    plt.ylabel("Goodput (kbps)")
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_histogram(goodput_values, label, filename, bins=50):
+    """Erstellt ein Histogramm für die Goodput-Werte."""
+    plt.figure(figsize=(10, 6))
+    plt.hist(goodput_values, bins=bins, color="blue", alpha=0.7)
+    plt.title(f"Histogramm des Goodputs ({label})")
+    plt.xlabel("Goodput (kbps)")
+    plt.ylabel("Häufigkeit")
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_combined_goodput(goodput_data, filename):
+    """Erstellt ein kombiniertes Liniendiagramm des Goodputs für alle Implementierungen."""
+    plt.figure(figsize=(10, 4))
+    for label, (goodput_values, color) in goodput_data.items():
+        plot_goodput_trendline(goodput_values, label, color, plot_combined=True)
+    plt.title("Goodput pro Testlauf mit Trendlinie (kombiniert)")
+    plt.xlabel("Testlauf")
+    plt.ylabel("Goodput (kbps)")
+    plt.legend()
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_trendline(goodput_values, label, color, plot_combined=False):
+    """Visualisiert Goodput-Werte in einem linearen Diagramm mit optionaler Trendlinie."""
+    x = np.array(range(1, len(goodput_values) + 1))
+    y = np.array(goodput_values)
+    plt.plot(
+        x, y, "-o" if not plot_combined else "o", label=f"Goodput {label}", color=color
+    )
+
+    trendline_color = adjust_lightness(color, 1.5)
+
+    # Polynom 2. Grades für Trendlinie
+    p = Polynomial.fit(x, y, 2)
+    x_new = np.linspace(x.min(), x.max(), 100)
+    y_new = p(x_new)
+    plt.plot(x_new, y_new, linestyle="--", linewidth=1.5, color=trendline_color)
+
+
+def generate_plots(files):
+    """Generiert Plots für jede Implementierung."""
+    goodput_data = {}
+
+    # Goodput-Werte einmal auslesen und in einem Dictionary speichern
+    for label, (filename, color) in files.items():
+        goodput_values = parse_goodput_from_file(filename)
+        goodput_data[label] = (goodput_values, color)
+
+    # Einzelne Diagramme für jede Implementierung
+    for label, (goodput_values, color) in goodput_data.items():
+        plot_goodput_over_time(
+            goodput_values, label, color, f"analytics/goodput_{label}.svg".lower()
+        )
+        plot_goodput_boxplot(
+            goodput_values, label, f"analytics/goodput_boxplot_{label}.svg".lower()
+        )
+        plot_goodput_histogram(
+            goodput_values, label, f"analytics/goodput_histogram_{label}.svg".lower()
+        )
+
+    # Kombiniertes Goodput Diagramm
+    plot_combined_goodput(goodput_data, "analytics/goodput_combined.svg")
+
+
 def print_optimized_commands(file_path, connector=" "):
     with open(file_path, "r") as f:
         lines = f.readlines()
@@ -55,65 +151,6 @@ def adjust_lightness(color, factor):
     return colorsys.hls_to_rgb(c[0], max(0, min(1, factor * c[1])), c[2])
 
 
-def visualize_goodput(goodput_values, label, color, plot_combined=False):
-    """Visualisiert Goodput-Werte in einem linearen Diagramm mit Trendlinie."""
-    x = np.array(range(1, len(goodput_values) + 1))
-    y = np.array(goodput_values)
-    if plot_combined:
-        plt.plot(x, y, "o", label=f"Goodput {label}", color=color)
-    else:
-        plt.plot(x, y, "-o", label=f"Goodput {label}", color=color)
-
-    # Polynom 2. Grades für Trendlinie
-    trend_color = adjust_lightness(color, 1.5)
-    p = Polynomial.fit(x, y, 2)
-    x_new = np.linspace(x.min(), x.max(), 100)
-    y_new = p(x_new)
-    plt.plot(
-        x_new,
-        y_new,
-        label=f"Trendlinie {label} (Polynom 2. Grades)",
-        linestyle="--",
-        linewidth=1.5,
-        color=trend_color,
-    )
-
-
-def plot_goodput_for_file(filename, label, color):
-    plt.figure(figsize=(10, 4))
-    goodput_values = parse_goodput_from_file(filename)
-    visualize_goodput(goodput_values, label, color)
-    plt.title(f"Goodput pro Testlauf mit Trendlinie ({label})")
-    plt.xlabel("Testlauf")
-    plt.ylabel("Goodput (kbps)")
-    plt.legend()
-    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig(f"{label}_goodput_diagram.svg")
-    plt.show()
-
-
-def generate_plots(files):
-    # Einzelne Diagramme für jede Datei
-    for label, (filename, color) in files.items():
-        plot_goodput_for_file(filename, label, color)
-
-    # Kombiniertes Diagramm
-    plt.figure(figsize=(10, 4))
-    for label, (filename, color) in files.items():
-        goodput_values = parse_goodput_from_file(filename)
-        visualize_goodput(goodput_values, label, color, plot_combined=True)
-
-    plt.title("Goodput pro Testlauf mit Trendlinie (kombiniert)")
-    plt.xlabel("Testlauf")
-    plt.ylabel("Goodput (kbps)")
-    plt.legend()
-    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
-    plt.tight_layout()
-    plt.savefig("all_data_goodput_diagram.svg")
-    plt.show()
-
-
 def find_best_goodput():
     best_goodput = 0
     best_file_path = ""
@@ -144,13 +181,13 @@ def find_best_goodput():
 
 def main():
     files = {
-        "LSQUIC": ("all_results_lsquic.txt", "royalblue"),
-        "Quiche": ("all_results_quiche.txt", "darkorange"),
+        "LSQUIC": ("analytics/lsquic_all_results.txt", "royalblue"),
+        "Quiche": ("analytics/quiche_all_results.txt", "darkorange"),
     }
-    path_best_result = "./quiche_best_result.txt"
+    generate_plots(files)
 
-    print_optimized_commands(path_best_result, "=")
-    # generate_plots(files)
+    # path_best_result = "./quiche_best_result.txt"
+    # print_optimized_commands(path_best_result, "=")
     # path, goodput = find_best_goodput()
     # print(path)
     # print(goodput)
