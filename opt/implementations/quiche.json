@@ -14,7 +14,7 @@
   "--max-window": {
     "default": 25165824,
     "type": "integer",
-    "range": [20132659, 30198988],
+    "range": [12582912, 35232153],
     "for": "both"
   },
   "--max-stream-data": {
@@ -26,7 +26,7 @@
   "--max-stream-window": {
     "default": 16777216,
     "type": "integer",
-    "range": [11744051, 21810380],
+    "range": [10066329, 23488102],
     "for": "both"
   },
   "--max-streams-bidi": {
@@ -44,7 +44,7 @@
   "--initial-cwnd-packets": {
     "default": 10,
     "type": "integer",
-    "range": [5, 15],
+    "range": [5, 20],
     "for": "both"
   }
 }

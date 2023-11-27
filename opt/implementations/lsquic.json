@@ -26,13 +26,13 @@
   "-o max_cfcw": {
     "default": 25165824,
     "type": "integer",
-    "range": [20132659, 30198988],
+    "range": [12582912, 35232153],
     "for": "both"
   },
   "-o max_sfcw": {
     "default": 16777216,
     "type": "integer",
-    "range": [11744051, 21810380],
+    "range": [10066329, 23488102],
     "for": "both"
   },
   "-o init_max_streams_bidi": {
