@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import shutil
+import csv
 
 import matplotlib.colors as mc
 import matplotlib.pyplot as plt
@@ -171,6 +172,74 @@ def print_optimized_commands(file_path, connector=" "):
     print(client_cmds.strip())
 
 
+def create_csv_from_test_results(input_file_path, output_csv_path, connector=" "):
+    """
+    Reads the test results from the original file and creates a CSV file with the specified format.
+    """
+    results = []
+
+    with open(input_file_path, "r") as f:
+        lines = f.readlines()
+
+    current_test = {}
+    server_cmds = {}
+    client_cmds = {}
+
+    for line in lines:
+        line = line.strip()
+
+        if line.startswith("Test #"):
+            # Process the previous test result before starting a new one
+            if current_test:
+                for key in server_cmds:
+                    current_test[key + " (Server)"] = server_cmds[key]
+                for key in client_cmds:
+                    current_test[key + " (Client)"] = client_cmds[key]
+                results.append(current_test)
+
+            # Reset for new test
+            current_test = {"Test Number": int(line.split("#")[1])}
+            server_cmds = {}
+            client_cmds = {}
+
+        elif line.startswith("| ") and not line.startswith("| Command"):
+            parts = line.split("|")
+            command = parts[1].strip()
+            server_value = parts[2].strip()
+            client_value = parts[3].strip()
+
+            if server_value:
+                server_cmds[command] = server_value
+            if client_value:
+                client_cmds[command] = client_value
+
+        elif line.startswith("Goodput:"):
+            goodput_value = float(line.split(":")[1].strip().split(" ")[0])
+            current_test["Goodput (kbps)"] = goodput_value
+
+    # Add the last test to results
+    if current_test:
+        for key in server_cmds:
+            current_test[key + " (Server)"] = server_cmds[key]
+        for key in client_cmds:
+            current_test[key + " (Client)"] = client_cmds[key]
+        results.append(current_test)
+
+    # Determining the columns for the CSV
+    columns = set()
+    for test in results:
+        for key in test:
+            columns.add(key)
+    columns = list(sorted(columns))
+
+    # Writing to CSV
+    with open(output_csv_path, "w", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=columns)
+        writer.writeheader()
+        for test in results:
+            writer.writerow(test)
+
+
 def adjust_lightness(color, factor):
     """Passt die Helligkeit einer Farbe an."""
 
@@ -217,6 +286,9 @@ def main():
     }
     generate_plots(files)
 
+    # create_csv_from_test_results(
+    #     "analytics/lsquic_all_results.txt", "analytics/lsquic_all_results.csv", "="
+    # )
     # path_best_result = "./quiche_best_result.txt"
     # print_optimized_commands(path_best_result, "=")
     # path, goodput = find_best_goodput()

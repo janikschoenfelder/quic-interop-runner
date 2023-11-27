@@ -524,6 +524,9 @@ class InteropRunner:
         table_str = table.get_string()
         output = f"Test #{counter}\n\n{table_str}\n\nRun took: {test_time}s\nGoodput: {goodput} kbps"
 
+        # Stellt sicher, dass das Verzeichnis existiert
+        os.makedirs(log_dir, exist_ok=True)
+
         with open(f"{log_dir}/result.txt", "w") as f:
             f.write(output)
 
@@ -571,7 +574,7 @@ class InteropRunner:
         default_test_values = []
 
         for i in range(5):
-            default_result, default_val = self._run_test(
+            _, default_val = self._run_test(
                 server,
                 client,
                 f"default_{i}",
@@ -582,11 +585,10 @@ class InteropRunner:
 
             default_test_values.append(default_val)
 
-        for j in range(5):
-            opt_result, opt_val = self._run_test(
+            _, opt_val = self._run_test(
                 server,
                 client,
-                f"default_{j}",
+                f"best_{i}",
                 test,
                 server_cmd,
                 client_cmd,
@@ -655,7 +657,7 @@ class InteropRunner:
                 res.details = ""
                 return res
 
-            log_dir = f"{self._log_dir}/{server}_{client}/quic_params/{counter}"
+            log_dir = f"{self._log_dir}/{server}_{client}/{test.name()}/{counter}"
             self._export_opt_test_result(commands, value, counter, start_time, log_dir)
 
             output_tables.append(
@@ -675,14 +677,20 @@ class InteropRunner:
                     "_", 1
                 )  # Trennt den letzten Teil nach dem Unterstrich ab
                 if target == "server":
-                    server_cmds += f" {cmd} {value}"
+                    if server in ["lsquic", "my-lsquic"]:
+                        server_cmds += f" {cmd}={value}"
+                    elif server == "quiche":
+                        server_cmds += f" {cmd} {value}"
                 elif target == "client":
-                    client_cmds += f" {cmd} {value}"
+                    if client in ["lsquic", "my-lsquic"]:
+                        client_cmds += f" {cmd}={value}"
+                    elif client == "quiche":
+                        client_cmds += f" {cmd} {value}"
 
             return server_cmds.strip(), client_cmds.strip()
 
         study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=2)
+        study.optimize(objective, n_trials=10000)
 
         best_params = study.best_params
         # best_value = study.best_value
