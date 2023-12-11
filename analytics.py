@@ -42,7 +42,7 @@ def plot_goodput_boxplot_combined(goodput_data, filename):
     goodputs = [data[0] for data in goodput_data.values()]
     labels = list(goodput_data.keys())
     ax.boxplot(goodputs, labels=labels, patch_artist=True)
-    ax.set_title("Kombinierter Box-Plot des Goodputs")
+    # ax.set_title("Kombinierter Box-Plot des Goodputs")
     ax.set_ylabel("Goodput (kbps)")
     ax.grid(True, which="both", linestyle="--", linewidth=0.5)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{int(x):,}"))
@@ -336,7 +336,7 @@ def plot_goodput_over_time_seaborn_smooth(goodput_values, label, color, filename
         goodput_values, np.ones(100) / 100, mode="valid"
     )  # 100-Punkte gleitender Durchschnitt
     plt.plot(smooth_data, label=f"{label} Gleitender Durchschnitt", color=color)
-    plt.title(f"Goodput über die Zeit ({label})")
+    # plt.title(f"Goodput über die Zeit ({label})")
     plt.xlabel("Testnummer")
     plt.ylabel("Goodput (kbps)")
     plt.legend()
@@ -363,7 +363,7 @@ def plot_goodput_boxplot_seaborn(goodput_values, label, filename):
     sns.set(style="whitegrid")
     plt.figure(figsize=(10, 4))
     sns.boxplot(data=goodput_values)
-    plt.title(f"Goodput Boxplot ({label})")
+    # plt.title(f"Goodput Boxplot ({label})")
     plt.xlabel("Implementierung")
     plt.ylabel("Goodput (kbps)")
     plt.tight_layout()
@@ -376,7 +376,7 @@ def plot_goodput_boxplot_combined_seaborn(goodput_data, filename):
     plt.figure(figsize=(10, 8))
     data = [values for label, (values, color) in goodput_data.items()]
     sns.boxplot(data=data)
-    plt.title("Kombinierter Goodput Boxplot")
+    # plt.title("Kombinierter Goodput Boxplot")
     plt.xlabel("Implementierung")
     plt.ylabel("Goodput (kbps)")
     plt.xticks(range(len(goodput_data)), goodput_data.keys())
@@ -390,7 +390,7 @@ def plot_combined_goodput_seaborn(goodput_data, filename):
     plt.figure(figsize=(10, 4))
     for label, (goodput_values, color) in goodput_data.items():
         plt.plot(range(len(goodput_values)), goodput_values, label=label, color=color)
-    plt.title("Kombinierter Goodput-Verlauf")
+    # plt.title("Kombinierter Goodput-Verlauf")
     plt.xlabel("Testnummer")
     plt.ylabel("Goodput (kbps)")
     plt.legend()
