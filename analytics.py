@@ -1,14 +1,17 @@
 import colorsys
+import csv
 import logging
 import os
 import re
 import shutil
-import csv
 
 import matplotlib.colors as mc
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import seaborn as sns
 from numpy.polynomial.polynomial import Polynomial
+from sklearn.preprocessing import LabelEncoder
 
 
 def parse_goodput_from_file(filename):
@@ -28,6 +31,21 @@ def plot_goodput_over_time(goodput_values, label, color, filename):
     plt.ylabel("Goodput (kbps)")
     plt.legend()
     plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_boxplot_combined(goodput_data, filename):
+    """Erstellt kombinierte Box-Plots für alle Goodput-Werte."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    goodputs = [data[0] for data in goodput_data.values()]
+    labels = list(goodput_data.keys())
+    ax.boxplot(goodputs, labels=labels, patch_artist=True)
+    ax.set_title("Kombinierter Box-Plot des Goodputs")
+    ax.set_ylabel("Goodput (kbps)")
+    ax.grid(True, which="both", linestyle="--", linewidth=0.5)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{int(x):,}"))
     plt.tight_layout()
     plt.savefig(filename)
     plt.close()
@@ -73,7 +91,7 @@ def plot_combined_goodput(goodput_data, filename):
     plt.close()
 
 
-def plot_moving_average(values, label, color, window_size=50):
+def plot_moving_average(values, label, color, window_size=1000):
     """Berechnet und plottet den gleitenden Durchschnitt über ein definiertes Fenster."""
     cumsum = np.cumsum(np.insert(values, 0, 0))
     ma = (cumsum[window_size:] - cumsum[:-window_size]) / float(window_size)
@@ -81,9 +99,9 @@ def plot_moving_average(values, label, color, window_size=50):
     plt.plot(
         x_ma,
         ma,
-        linestyle="--",
+        linestyle="-",
         linewidth=1.5,
-        color=color,
+        color="black",
         label=f"Gleitender Durchschnitt {label}",
     )
 
@@ -109,19 +127,20 @@ def plot_goodput_trendline(
     """Visualisiert Goodput-Werte in einem linearen Diagramm mit optionaler Trendlinie."""
     x = np.array(range(1, len(goodput_values) + 1))
     y = np.array(goodput_values)
-    plt.plot(
-        x, y, "-o" if not plot_combined else "o", label=f"Goodput {label}", color=color
-    )
+
+    plt.scatter(
+        x, y, label=f"Goodput {label}", color=color, s=10
+    )  # s=20 setzt die Größe der Punkte
 
     trendline_color = adjust_lightness(color, 1.5)
 
-    if trendline == "ma":
-        plot_moving_average(goodput_values, label, trendline_color, window_size=50)
-    elif trendline == "poly":
-        plot_poly_fit(x, y, trendline_color, label)
+    # if trendline == "ma":
+    #     plot_moving_average(goodput_values, label, trendline_color, window_size=50)
+    # elif trendline == "poly":
+    #     plot_poly_fit(x, y, trendline_color, label)
 
 
-def generate_plots(files):
+def generate_plots(files, concat=False):
     """Generiert Plots für jede Implementierung."""
     goodput_data = {}
 
@@ -130,17 +149,25 @@ def generate_plots(files):
         goodput_values = parse_goodput_from_file(filename)
         goodput_data[label] = (goodput_values, color)
 
-    # Einzelne Diagramme für jede Implementierung
-    for label, (goodput_values, color) in goodput_data.items():
+        # Erstellen von Goodput-Über-Zeit- und Histogramm-Diagrammen für jede Implementierung
         plot_goodput_over_time(
             goodput_values, label, color, f"analytics/goodput_{label}.svg".lower()
-        )
-        plot_goodput_boxplot(
-            goodput_values, label, f"analytics/goodput_boxplot_{label}.svg".lower()
         )
         plot_goodput_histogram(
             goodput_values, label, f"analytics/goodput_histogram_{label}.svg".lower()
         )
+
+    if concat:
+        # Kombinierter Boxplot
+        plot_goodput_boxplot_combined(
+            goodput_data, "analytics/goodput_boxplot_combined.svg"
+        )
+    else:
+        # Einzelne Boxplots für jede Implementierung
+        for label, (goodput_values, _) in goodput_data.items():
+            plot_goodput_boxplot(
+                goodput_values, label, f"analytics/goodput_boxplot_{label}.svg".lower()
+            )
 
     # Kombiniertes Goodput Diagramm
     plot_combined_goodput(goodput_data, "analytics/goodput_combined.svg")
@@ -279,12 +306,244 @@ def find_best_goodput():
     return best_file_path, best_goodput
 
 
+def plot_goodput_over_time_seaborn(goodput_values, label, color, filename):
+    sns.set(style="whitegrid")
+    plt.figure(figsize=(10, 4))
+    plt.scatter(
+        range(len(goodput_values)), goodput_values, label=label, color=color, s=10
+    )
+    plt.title(f"Goodput über die Zeit ({label})")
+    plt.xlabel("Testnummer")
+    plt.ylabel("Goodput (kbps)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_over_time_seaborn_smooth(goodput_values, label, color, filename):
+    sns.set(style="whitegrid")
+    plt.figure(figsize=(10, 4))
+    plt.scatter(
+        range(len(goodput_values)),
+        goodput_values,
+        label=f"{label} Datenpunkte",
+        color=color,
+        s=5,
+        alpha=0.3,
+    )  # Reduzierte Punktegröße
+    smooth_data = np.convolve(
+        goodput_values, np.ones(100) / 100, mode="valid"
+    )  # 100-Punkte gleitender Durchschnitt
+    plt.plot(smooth_data, label=f"{label} Gleitender Durchschnitt", color=color)
+    plt.title(f"Goodput über die Zeit ({label})")
+    plt.xlabel("Testnummer")
+    plt.ylabel("Goodput (kbps)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_histogram_seaborn(goodput_values, label, color, filename):
+    sns.set(style="whitegrid")
+    plt.figure(figsize=(10, 4))
+    sns.histplot(goodput_values, color=color, kde=True, label=label)
+    # plt.title(f"Goodput Histogramm ({label})")
+    plt.xlabel("Goodput (kbps)")
+    plt.ylabel("Häufigkeit")
+    plt.xlim([min(goodput_values), max(goodput_values)])
+    plt.legend(loc="upper left")
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_boxplot_seaborn(goodput_values, label, filename):
+    sns.set(style="whitegrid")
+    plt.figure(figsize=(10, 4))
+    sns.boxplot(data=goodput_values)
+    plt.title(f"Goodput Boxplot ({label})")
+    plt.xlabel("Implementierung")
+    plt.ylabel("Goodput (kbps)")
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_goodput_boxplot_combined_seaborn(goodput_data, filename):
+    sns.set(style="whitegrid")
+    plt.figure(figsize=(10, 8))
+    data = [values for label, (values, color) in goodput_data.items()]
+    sns.boxplot(data=data)
+    plt.title("Kombinierter Goodput Boxplot")
+    plt.xlabel("Implementierung")
+    plt.ylabel("Goodput (kbps)")
+    plt.xticks(range(len(goodput_data)), goodput_data.keys())
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_combined_goodput_seaborn(goodput_data, filename):
+    sns.set(style="whitegrid")
+    plt.figure(figsize=(10, 4))
+    for label, (goodput_values, color) in goodput_data.items():
+        plt.plot(range(len(goodput_values)), goodput_values, label=label, color=color)
+    plt.title("Kombinierter Goodput-Verlauf")
+    plt.xlabel("Testnummer")
+    plt.ylabel("Goodput (kbps)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+
+
+def plot_heatmaps_for_csv(label):
+    # Einlesen der CSV-Daten
+    data = pd.read_csv(f"{label}_all_results.csv")
+    data = data.drop(columns=["Test Number"])
+
+    # Umwandeln kategorischer Daten in numerische Werte, falls notwendig
+    label_encoder = LabelEncoder()
+    for column in data.columns:
+        if data[column].dtype == "object":
+            data[column] = label_encoder.fit_transform(data[column])
+
+    data = data.loc[:, data.std() > 0]
+
+    correlation_with_goodput = data.corrwith(data["Goodput (kbps)"]).drop(
+        "Goodput (kbps)"
+    )
+
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        correlation_with_goodput.to_frame(),
+        annot=True,
+        cmap="coolwarm",
+        vmin=-1,
+        vmax=1,
+    )
+    plt.title("Korrelation mit Goodput")
+    plt.savefig(f"{label}_correlation_with_goodput_heatmap.png")
+    plt.close()
+
+
+def plot_pair_plots_for_csv(label):
+    # Einlesen der CSV-Daten
+    data = pd.read_csv(f"{label}_all_results.csv")
+    data = data.drop(columns=["Test Number"])
+
+    columns_for_pair_plot = [col for col in data.columns if col != "Goodput (kbps)"]
+    columns_for_pair_plot.append("Goodput (kbps)")
+
+    sns.pairplot(data[columns_for_pair_plot])
+    plt.suptitle("Pair Plot mit Goodput", y=1.02)
+
+    # Speichern des Pair Plots
+    plt.savefig(f"analytics/pair/{label}_pairplot.svg")
+    plt.close()
+
+
+def plot_individual_relationship_with_goodput(label):
+    data = pd.read_csv(f"{label}_all_results.csv")
+    # Entfernen von 'Test Number' und 'Goodput (kbps)'
+    variables = data.drop(columns=["Test Number", "Goodput (kbps)"]).columns
+
+    for var in variables:
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(x=var, y="Goodput (kbps)", data=data)
+        plt.title(f"Beziehung zwischen {var} und Goodput")
+        plt.xlabel(var)
+        plt.ylabel("Goodput (kbps)")
+        plt.savefig(f"analytics/pair/{label}_{var}_goodput_relation.svg")
+        plt.close()
+
+
+def plot_kde(label):
+    data = pd.read_csv(f"{label}_all_results.csv")
+    numeric_data = data.select_dtypes(include=["float64", "int64"])
+    numeric_data = numeric_data.drop(columns=["Test Number"])
+
+    for column in numeric_data.columns:
+        # Prüfen, ob die Varianz ausreichend ist
+        if numeric_data[column].std() > 0:
+            plt.figure(figsize=(8, 6))
+            sns.kdeplot(
+                data=numeric_data, x=column, y="Goodput (kbps)", warn_singular=False
+            )
+            plt.title(f"KDE von {column} und Goodput")
+            plt.savefig(f"analytics/kde/{label}_kde_{column}_vs_goodput.svg")
+            plt.close()
+        else:
+            print(f"Warnung: Keine ausreichende Varianz in {column} für KDE.")
+
+
+def plot_jointplots(label):
+    data = pd.read_csv(f"{label}_all_results.csv")
+    variables = data.drop(columns=["Test Number", "Goodput (kbps)"]).columns
+
+    for var in variables:
+        sns.jointplot(x=var, y="Goodput (kbps)", data=data, kind="scatter")
+        plt.title(f"Jointplot von {var} und Goodput", pad=70)
+        plt.savefig(f"analytics/joint/{label}_jointplot_{var}_vs_goodput.svg")
+        plt.close()
+
+
+def generate_plots_seaborn(files, concat=False):
+    """Generiert Plots für jede Implementierung mit Seaborn."""
+    goodput_data = {}
+
+    # Goodput-Werte einmal auslesen und in einem Dictionary speichern
+    for label, (filename, color) in files.items():
+        goodput_values = parse_goodput_from_file(filename)
+        goodput_data[label] = (goodput_values, color)
+
+        # Erstellen von Goodput-Über-Zeit- und Histogramm-Diagrammen für jede Implementierung
+        plot_goodput_over_time_seaborn(
+            goodput_values, label, color, f"analytics/goodput_{label}.svg".lower()
+        )
+        plot_goodput_over_time_seaborn_smooth(
+            goodput_values,
+            label,
+            color,
+            f"analytics/goodput_smooth_{label}.svg".lower(),
+        )
+        plot_goodput_histogram_seaborn(
+            goodput_values,
+            label,
+            color,
+            f"analytics/goodput_histogram_{label}.svg".lower(),
+        )
+        # plot_heatmaps_for_csv(label)
+        # plot_pair_plots_for_csv(label)
+        # plot_individual_relationship_with_goodput(label)
+        # plot_kde(label)
+        # plot_jointplots(label)
+
+    if concat:
+        # Kombinierter Boxplot
+        plot_goodput_boxplot_combined_seaborn(
+            goodput_data, "analytics/goodput_boxplot_combined.svg"
+        )
+    else:
+        # Einzelne Boxplots für jede Implementierung
+        for label, (goodput_values, _) in goodput_data.items():
+            plot_goodput_boxplot_seaborn(
+                goodput_values, label, f"analytics/goodput_boxplot_{label}.svg".lower()
+            )
+
+    # Kombiniertes Goodput Diagramm
+    plot_combined_goodput_seaborn(goodput_data, "analytics/goodput_combined.svg")
+
+
 def main():
     files = {
         "LSQUIC": ("analytics/lsquic_all_results.txt", "royalblue"),
         "Quiche": ("analytics/quiche_all_results.txt", "darkorange"),
     }
-    generate_plots(files)
+    # generate_plots(files, True)
+    generate_plots_seaborn(files, True)
 
     # create_csv_from_test_results(
     #     "analytics/lsquic_all_results.txt", "analytics/lsquic_all_results.csv", "="
