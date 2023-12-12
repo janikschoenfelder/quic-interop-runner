@@ -333,7 +333,7 @@ def plot_goodput_over_time_seaborn_smooth(goodput_values, label, color, filename
         alpha=0.3,
     )  # Reduzierte Punktegröße
     smooth_data = np.convolve(
-        goodput_values, np.ones(100) / 100, mode="valid"
+        goodput_values, np.ones(50) / 50, mode="valid"
     )  # 100-Punkte gleitender Durchschnitt
     plt.plot(smooth_data, label=f"{label} Gleitender Durchschnitt", color=color)
     # plt.title(f"Goodput über die Zeit ({label})")
