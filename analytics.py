@@ -375,6 +375,7 @@ def plot_goodput_boxplot_combined_seaborn(goodput_data, filename):
     sns.set(style="whitegrid")
     plt.figure(figsize=(10, 8))
     data, colors = zip(*[(values, color) for label, (values, color) in goodput_data.items()])
+    colors = [adjust_lightness(color, 1.4) for color in colors]
     sns.boxplot(data=data, palette=colors)
     # plt.title("Kombinierter Goodput Boxplot")
     plt.xlabel("Implementierung")
@@ -546,13 +547,13 @@ def generate_plots_seaborn(files, testrun, concat=False):
 
 
 def main():
-    testrun = 10000
+    testrun = 2500
     files = {
         "LSQUIC": (f"analytics/results/lsquic_all_results_{testrun}.txt", "royalblue"),
         "Quiche": (f"analytics/results/quiche_all_results_{testrun}.txt", "darkorange"),
     }
     # generate_plots(files, True)
-    generate_plots_seaborn(files, testrun, False)
+    generate_plots_seaborn(files, testrun, True)
 
     # create_csv_from_test_results(
     #     "analytics/lsquic_all_results.txt", "analytics/lsquic_all_results.csv", "="
