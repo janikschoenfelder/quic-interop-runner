@@ -328,7 +328,7 @@ def plot_goodput_over_time_seaborn_smooth(goodput_values, label, color, filename
         range(len(goodput_values)),
         goodput_values,
         label=f"{label} Datenpunkte",
-        color=color,
+        color=adjust_lightness(color, 1.2),
         s=5,
         alpha=0.3,
     )  # Reduzierte Punktegröße
@@ -339,7 +339,7 @@ def plot_goodput_over_time_seaborn_smooth(goodput_values, label, color, filename
     # plt.title(f"Goodput über die Zeit ({label})")
     plt.xlabel("Testnummer")
     plt.ylabel("Goodput (kbps)")
-    plt.legend()
+    plt.legend(loc="lower left")
     plt.tight_layout()
     plt.savefig(filename)
     plt.close()
