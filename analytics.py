@@ -490,7 +490,7 @@ def plot_jointplots(label):
         plt.close()
 
 
-def generate_plots_seaborn(files, concat=False):
+def generate_plots_seaborn(files, testrun, concat=False):
     """Generiert Plots für jede Implementierung mit Seaborn."""
     goodput_data = {}
 
@@ -501,19 +501,22 @@ def generate_plots_seaborn(files, concat=False):
 
         # Erstellen von Goodput-Über-Zeit- und Histogramm-Diagrammen für jede Implementierung
         plot_goodput_over_time_seaborn(
-            goodput_values, label, color, f"analytics/goodput_{label}.svg".lower()
+            goodput_values,
+            label,
+            color,
+            f"analytics/{testrun}/goodput_{label}.svg".lower(),
         )
         plot_goodput_over_time_seaborn_smooth(
             goodput_values,
             label,
             color,
-            f"analytics/goodput_smooth_{label}.svg".lower(),
+            f"analytics/{testrun}/goodput_smooth_{label}.svg".lower(),
         )
         plot_goodput_histogram_seaborn(
             goodput_values,
             label,
             color,
-            f"analytics/goodput_histogram_{label}.svg".lower(),
+            f"analytics/{testrun}/goodput_histogram_{label}.svg".lower(),
         )
         # plot_heatmaps_for_csv(label)
         # plot_pair_plots_for_csv(label)
@@ -524,26 +527,31 @@ def generate_plots_seaborn(files, concat=False):
     if concat:
         # Kombinierter Boxplot
         plot_goodput_boxplot_combined_seaborn(
-            goodput_data, "analytics/goodput_boxplot_combined.svg"
+            goodput_data, f"analytics/{testrun}/goodput_boxplot_combined.svg"
         )
     else:
         # Einzelne Boxplots für jede Implementierung
         for label, (goodput_values, _) in goodput_data.items():
             plot_goodput_boxplot_seaborn(
-                goodput_values, label, f"analytics/goodput_boxplot_{label}.svg".lower()
+                goodput_values,
+                label,
+                f"analytics/{testrun}/goodput_boxplot_{label}.svg".lower(),
             )
 
     # Kombiniertes Goodput Diagramm
-    plot_combined_goodput_seaborn(goodput_data, "analytics/goodput_combined.svg")
+    plot_combined_goodput_seaborn(
+        goodput_data, f"analytics/{testrun}/goodput_combined.svg"
+    )
 
 
 def main():
+    testrun = 10000
     files = {
-        "LSQUIC": ("analytics/lsquic_all_results.txt", "royalblue"),
-        "Quiche": ("analytics/quiche_all_results.txt", "darkorange"),
+        "LSQUIC": (f"analytics/results/lsquic_all_results_{testrun}.txt", "royalblue"),
+        "Quiche": (f"analytics/results/quiche_all_results_{testrun}.txt", "darkorange"),
     }
     # generate_plots(files, True)
-    generate_plots_seaborn(files, True)
+    generate_plots_seaborn(files, testrun, False)
 
     # create_csv_from_test_results(
     #     "analytics/lsquic_all_results.txt", "analytics/lsquic_all_results.csv", "="
