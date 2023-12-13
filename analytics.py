@@ -359,10 +359,10 @@ def plot_goodput_histogram_seaborn(goodput_values, label, color, filename):
     plt.close()
 
 
-def plot_goodput_boxplot_seaborn(goodput_values, label, filename):
+def plot_goodput_boxplot_seaborn(goodput_values, label, color, filename):
     sns.set(style="whitegrid")
     plt.figure(figsize=(10, 4))
-    sns.boxplot(data=goodput_values)
+    sns.boxplot(data=goodput_values, color=color)
     # plt.title(f"Goodput Boxplot ({label})")
     plt.xlabel("Implementierung")
     plt.ylabel("Goodput (kbps)")
@@ -374,8 +374,8 @@ def plot_goodput_boxplot_seaborn(goodput_values, label, filename):
 def plot_goodput_boxplot_combined_seaborn(goodput_data, filename):
     sns.set(style="whitegrid")
     plt.figure(figsize=(10, 8))
-    data = [values for label, (values, color) in goodput_data.items()]
-    sns.boxplot(data=data)
+    data, colors = zip(*[(values, color) for label, (values, color) in goodput_data.items()])
+    sns.boxplot(data=data, palette=colors)
     # plt.title("Kombinierter Goodput Boxplot")
     plt.xlabel("Implementierung")
     plt.ylabel("Goodput (kbps)")
@@ -531,10 +531,11 @@ def generate_plots_seaborn(files, testrun, concat=False):
         )
     else:
         # Einzelne Boxplots für jede Implementierung
-        for label, (goodput_values, _) in goodput_data.items():
+        for label, (goodput_values, color) in goodput_data.items():
             plot_goodput_boxplot_seaborn(
                 goodput_values,
                 label,
+                color,
                 f"analytics/{testrun}/goodput_boxplot_{label}.svg".lower(),
             )
 
