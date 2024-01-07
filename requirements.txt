@@ -2,3 +2,9 @@ pycryptodome
 termcolor
 prettytable
 pyshark
+optuna
+matplotlib
+numpy
+seaborn
+pandas
+sklearn

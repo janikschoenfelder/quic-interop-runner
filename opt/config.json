@@ -1,0 +1,6 @@
+{
+  "bandwidth": 50,
+  "delay": 15,
+  "filesize": 10,
+  "filesize_unit": "MB"
+}

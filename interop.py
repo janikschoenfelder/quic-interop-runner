@@ -12,51 +12,13 @@ import tempfile
 from datetime import datetime
 from typing import Callable, List, Tuple
 
+import optuna
 import prettytable
-from termcolor import colored
-
 import testcases
+from Crypto.Cipher import AES
 from result import TestResult
+from termcolor import colored
 from testcases import Perspective
-
-cc_params = ["bbr", "bbr2", "cubic", "reno"]
-
-params = {
-    "quiche": {
-        "cc": {
-            "cmd": "--cc-algorithm",
-            "options": {"bbr": "bbr", "bbr2": "bbr2", "cubic": "cubic", "reno": "reno"},
-            "default": "cubic",
-        }
-    },
-    "lsquic": {
-        "cc": {
-            "cmd": "-o cc_algo=",
-            "options": {"cubic": "1", "bbr": "2", "adaptive": "3"},
-            "default": "adaptive",
-        },
-        "cc_rtt_refresh": {
-            "cmd": "-o CC_RTT_THRESH=",
-            "default": 1500,
-        },
-        "max_data_server": {
-            "cmd": "-o MAX_DATA_SERVER=",
-            "default": (3 * 1024 * 1024 / 2),
-        },
-        "max_data_client": {
-            "cmd": "-o MAX_DATA_CLIENT=",
-            "default": (15 * 1024 * 1024),
-        },
-        "max_stream_data_server": {
-            "cmd": "-o MAX_STREAM_DATA_UNI_SERVER=",
-            "default": (12 * 1024),
-        },
-        "max_stream_data_client": {
-            "cmd": "-o MAX_STREAM_DATA_UNI_CLIENT=",
-            "default": (32 * 1024),
-        },
-    },
-}
 
 
 def random_string(length: int):
@@ -466,9 +428,11 @@ class InteropRunner:
             log_dir = self._log_dir + "/" + server + "_" + client + "/" + str(testcase)
             if log_dir_prefix:
                 log_dir += "/" + log_dir_prefix
-            shutil.copytree(server_log_dir.name, log_dir + "/server")
-            shutil.copytree(client_log_dir.name, log_dir + "/client")
-            shutil.copytree(sim_log_dir.name, log_dir + "/sim")
+            # shutil.copytree(server_log_dir.name, log_dir + "/server")
+            # shutil.copytree(client_log_dir.name, log_dir + "/client")
+            # shutil.copytree(sim_log_dir.name, log_dir + "/sim")
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
             shutil.copyfile(log_file.name, log_dir + "/output.txt")
             if self._save_files and status == TestResult.FAILED:
                 shutil.copytree(testcase.www_dir(), log_dir + "/www")
@@ -500,35 +464,15 @@ class InteropRunner:
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
         values = []
-        output = []
-        # for i in range(0, test.repetitions()):
-        counter = 1
-        for i in range(0, len(cc_params)):
-            for j in range(0, len(cc_params)):
-                result, value = self._run_test(
-                    server,
-                    client,
-                    "%d" % counter,
-                    test,
-                    "--cc-algorithm " + cc_params[i],
-                    "--cc-algorithm " + cc_params[j],
-                )
+        for i in range(0, test.repetitions()):
+            result, value = self._run_test(server, client, "%d" % (i + 1), test)
+            if result != TestResult.SUCCEEDED:
+                res = MeasurementResult()
+                res.result = result
+                res.details = ""
+                return res
+            values.append(value)
 
-                counter += 1
-
-                if result != TestResult.SUCCEEDED:
-                    res = MeasurementResult()
-                    res.result = result
-                    res.details = ""
-                    return res
-                output.append(
-                    cc_params[i] + "-" + cc_params[j] + ": " + str(value) + " kbps"
-                )
-                values.append(value)
-
-        logging.debug("------------")
-        logging.debug(output)
-        logging.debug("------------")
         logging.debug(values)
         res = MeasurementResult()
         res.result = TestResult.SUCCEEDED
@@ -536,6 +480,404 @@ class InteropRunner:
             statistics.mean(values), statistics.stdev(values), test.unit()
         )
         return res
+
+    def _export_quic_optimization(self, all_results, best_result, default_result):
+        columns = ["Command", "Server", "Client"]
+        parsed_results = []
+        best_goodput = 0
+        best_test = None
+        for idx, test in enumerate(all_results):
+            table = prettytable.PrettyTable(columns)
+            table.align = "l"
+            for command in test["commands"]:
+                table.add_row([command["cmd"], command["server"], command["client"]])
+            table_str = table.get_string()
+            separator = "-" * len(table_str.splitlines()[0])
+            formatted_test = f"Test #{test['counter']}\n\n{table_str}\nGoodput: {test['goodput']} kbps\n{separator}\n\n"
+
+            if test["goodput"] > best_goodput:
+                best_goodput = test["goodput"]
+                best_test = formatted_test
+            parsed_results.append(formatted_test)
+
+        # All results
+        with open(self._log_dir + "/all_results.txt", "w") as f:
+            f.write("".join(parsed_results))
+
+        # Best result
+        with open(self._log_dir + "/best_result.txt", "w") as f:
+            test_time = datetime.now() - self._start_time
+            text = (
+                f"{best_test}Run took: {test_time}\n\n"
+                f"Mean with optimized params: {best_result}\n"
+                f"Mean with default params: {default_result}"
+            )
+            f.write(text)
+
+    def _export_opt_test_result(self, commands, goodput, counter, start_time, log_dir):
+        test_time = (datetime.now() - start_time).total_seconds()
+        table = prettytable.PrettyTable(["Command", "Server", "Client"])
+        table.align = "l"
+        for command in commands:
+            table.add_row([command["cmd"], command["server"], command["client"]])
+        table_str = table.get_string()
+        output = f"Test #{counter}\n\n{table_str}\n\nRun took: {test_time}s\nGoodput: {goodput} kbps"
+
+        os.makedirs(log_dir, exist_ok=True)
+
+        with open(f"{log_dir}/result.txt", "w") as f:
+            f.write(output)
+
+    def _get_opt_cmds(self, server, trial):
+        commands = []
+        server_name = "lsquic" if server == "my-lsquic" else server
+
+        with open(f"./opt/implementations/{server_name}.json", "r") as f:
+            config = json.load(f)
+
+        def add_variation(param_cmd, param_info, param_type):
+            cmd_info = {"cmd": param_cmd}
+            for role in ["server", "client"]:
+                if param_info["for"] in [role, "both"]:
+                    value = (
+                        trial.suggest_categorical(
+                            f"{param_cmd}_{role}", param_info["values"]
+                        )
+                        if param_type == "categorical"
+                        else trial.suggest_int(
+                            f"{param_cmd}_{role}", *param_info["range"]
+                        )
+                    )
+                    cmd_info[role] = value
+            return cmd_info if "server" in cmd_info or "client" in cmd_info else None
+
+        for param_cmd, param_info in config.items():
+            cmd_info = add_variation(param_cmd, param_info, param_info["type"])
+            if cmd_info:
+                commands.append(cmd_info)
+
+        return commands
+
+    def _compare_with_default_conf(
+        self,
+        server: str,
+        client: str,
+        test: Callable[[], testcases.Measurement],
+        server_cmd,
+        client_cmd,
+    ):
+        best_test_values = []
+        default_test_values = []
+
+        for i in range(5):
+            _, default_val = self._run_test(
+                server,
+                client,
+                f"default_{i}",
+                test,
+                "",
+                "",
+            )
+
+            default_test_values.append(default_val)
+
+            _, opt_val = self._run_test(
+                server,
+                client,
+                f"best_{i}",
+                test,
+                server_cmd,
+                client_cmd,
+            )
+
+            best_test_values.append(opt_val)
+
+        best_result = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(best_test_values),
+            statistics.stdev(best_test_values),
+            test.unit(),
+        )
+
+        default_result = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(default_test_values),
+            statistics.stdev(default_test_values),
+            test.unit(),
+        )
+
+        logging.debug("BEST RESULT\n" + best_result + "\n")
+        logging.debug("DEFAULT RESULT\n" + default_result + "\n")
+
+        return best_result, default_result
+
+    def _run_quic_optimization(
+        self, server: str, client: str, test: Callable[[], testcases.Measurement]
+    ) -> MeasurementResult:
+        values = []
+        counter = 0
+        output_tables = []
+
+        def generate_command_strings(commands, server, client):
+            server_cmd = ""
+            client_cmd = ""
+            for config in commands:
+                if "server" in config:
+                    if server in ["lsquic", "my-lsquic"]:
+                        server_cmd += f" {config['cmd']}={config['server']}"
+                    elif server == "quiche":
+                        server_cmd += f" {config['cmd']} {config['server']}"
+
+                if "client" in config:
+                    if client in ["lsquic", "my-lsquic"]:
+                        client_cmd += f" {config['cmd']}={config['client']}"
+                    elif client == "quiche":
+                        client_cmd += f" {config['cmd']} {config['client']}"
+
+            return server_cmd.strip(), client_cmd.strip()
+
+        def objective(trial):
+            nonlocal counter
+            start_time = datetime.now()
+            commands = self._get_opt_cmds(server, trial)
+
+            server_cmd, client_cmd = generate_command_strings(commands, server, client)
+
+            result, value = self._run_test(
+                server, client, str(counter), test, server_cmd, client_cmd
+            )
+
+            if result != TestResult.SUCCEEDED:
+                res = MeasurementResult()
+                res.result = result
+                res.details = ""
+                return res
+
+            log_dir = f"{self._log_dir}/{server}_{client}/{test.name()}/{counter}"
+            self._export_opt_test_result(commands, value, counter, start_time, log_dir)
+
+            output_tables.append(
+                {"commands": commands, "goodput": value, "counter": counter}
+            )
+
+            values.append(value)
+            counter += 1
+            return value
+
+        def params_to_cmd_strings(best_params):
+            server_cmds = ""
+            client_cmds = ""
+
+            for key, value in best_params.items():
+                cmd, target = key.rsplit(
+                    "_", 1
+                )
+                if target == "server":
+                    if server in ["lsquic", "my-lsquic"]:
+                        server_cmds += f" {cmd}={value}"
+                    elif server == "quiche":
+                        server_cmds += f" {cmd} {value}"
+                elif target == "client":
+                    if client in ["lsquic", "my-lsquic"]:
+                        client_cmds += f" {cmd}={value}"
+                    elif client == "quiche":
+                        client_cmds += f" {cmd} {value}"
+
+            return server_cmds.strip(), client_cmds.strip()
+
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=10000)
+
+        best_params = study.best_params
+        # best_value = study.best_value
+
+        # Build best params as cmd string
+        best_server_cmd, best_client_cmd = params_to_cmd_strings(best_params)
+
+        # Let optimized params compete against default params
+        best_result, default_result = self._compare_with_default_conf(
+            server, client, test, best_server_cmd, best_client_cmd
+        )
+
+        self._export_quic_optimization(output_tables, best_result, default_result)
+        
+        self._run_http2_transfer(test)
+
+        logging.debug(values)
+
+        res = MeasurementResult()
+        res.result = TestResult.SUCCEEDED
+        res.details = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(values), statistics.stdev(values), test.unit()
+        )
+        return res
+
+    def _fetch_file(self, size, unit, bandwidth, delay):
+        expired = False
+
+        try:
+            r = subprocess.run(
+                "docker-compose up -d http2_client",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=180,
+            )
+            output = r.stdout
+        except subprocess.TimeoutExpired as ex:
+            output = ex.stdout
+            expired = True
+
+        logging.debug("%s", output.decode("utf-8"))
+
+        if expired:
+            logging.debug("Test failed: took longer than %ds.", 180)
+            r = subprocess.run(
+                "docker-compose stop http2_client",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=60,
+            )
+            logging.debug("%s", r.stdout.decode("utf-8"))
+
+        subprocess.run(
+            "docker exec quic-interop-runner_http2_client_1 tc qdisc add dev eth0 handle 1: ingress",
+            shell=True,
+        )
+        # subprocess.run(
+        #     f"docker exec http2_client tc filter add dev eth0 parent 1: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate {bandwidth}mbit burst 10k drop flowid :1"
+        # )
+        subprocess.run(
+            f"docker exec quic-interop-runner_http2_client_1 tc qdisc add dev eth0 root tbf rate {bandwidth}mbit latency {delay}ms burst 10k",
+            shell=True,
+        )
+
+        curl_command = [
+            "docker-compose",
+            "exec",
+            "-T",
+            "http2_client",
+            "curl",
+            "-o",
+            "/dev/null",
+            "-s",
+            "-w",
+            "%{time_total}",
+            "--cacert",
+            "/certs/cert.pem",
+            "https://172.28.1.1/",
+            "-k"
+        ]
+
+        times = []
+        for _ in range(5):
+            logging.debug("Curling...")
+            result = subprocess.run(curl_command, stdout=subprocess.PIPE, text=True)
+            if result.returncode == 0:
+                time_s = float(result.stdout.strip())
+                time_ms = time_s * 1000
+                goodput_bps = size * unit * 8 / time_s
+                goodput_kbps = goodput_bps / 1024
+                logging.debug(
+                    "Transfering %d MB took %d ms. Goodput: %d kbps",
+                    size,
+                    time_ms,
+                    goodput_kbps,
+                )
+                times.append(goodput_kbps)
+            else:
+                print(f"Error during curl command: {result.stderr}")
+
+        subprocess.run(
+            "docker-compose stop http2_client",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+        )
+
+        return times
+
+    def _run_http2_transfer(self, test):
+        subprocess.run("rm -rf ./http2/certs", shell=True)
+        testcases.generate_cert_chain("./http2/certs")
+
+        with open("./opt/config.json", "r") as f:
+            config = json.load(f)
+
+        size = int(config["filesize"])
+        unit = testcases.KB if config.get("filesize_unit") == "KB" else testcases.MB
+        bandwidth = int(config["bandwidth"])
+        delay = int(config["delay"])
+        
+        # generate random file
+        FILESIZE = size * unit
+        directory = "http2/www/"
+        os.makedirs(directory, exist_ok=True)
+        filename = "random_file"
+        enc = AES.new(os.urandom(32), AES.MODE_OFB, b"a" * 16)
+        file_path = os.path.join(directory, filename)
+        with open(file_path, "wb") as f:
+            f.write(enc.encrypt(b" " * FILESIZE))
+
+        expired = False
+
+        try:
+            r = subprocess.run(
+                "docker-compose up -d http2_server",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=180,
+            )
+            output = r.stdout
+        except subprocess.TimeoutExpired as ex:
+            output = ex.stdout
+            expired = True
+
+        logging.debug("%s", output.decode("utf-8"))
+
+        if expired:
+            logging.debug("Test failed: took longer than %ds.", 180)
+            r = subprocess.run(
+                "docker-compose stop http2_server",
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=60,
+            )
+            logging.debug("%s", r.stdout.decode("utf-8"))
+
+        subprocess.run(
+            "docker exec quic-interop-runner_http2_server_1 tc qdisc add dev eth0 handle 1: ingress",
+            shell=True,
+        )
+        # subprocess.run(
+        #     f"docker exec http2_server tc filter add dev eth0 parent 1: protocol ip prio 50 u32 match ip src 0.0.0.0/0 police rate 50mbit burst 10k drop flowid :1"
+        # )
+        subprocess.run(
+            f"docker exec quic-interop-runner_http2_server_1 tc qdisc add dev eth0 root tbf rate {bandwidth}mbit latency {delay}ms burst 10k",
+            shell=True,
+        )
+
+        times = self._fetch_file(size, unit, bandwidth, delay)
+
+        subprocess.run(
+            "docker-compose stop http2_server",
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+        )
+
+        logging.debug("HTTP/2 TIMES\n")
+        logging.debug(times)
+        logging.debug("-------------------")
+
+        result = "{:.0f} (± {:.0f}) {}".format(
+            statistics.mean(times), statistics.stdev(times), test.unit()
+        )
+
+        logging.debug(result)
 
     def run(self):
         """run the interop test suite and output the table"""
@@ -566,7 +908,10 @@ class InteropRunner:
 
                 # run the measurements
                 for measurement in self._measurements:
-                    res = self._run_measurement(server, client, measurement)
+                    if measurement.abbreviation() == "QO":
+                        res = self._run_quic_optimization(server, client, measurement)
+                    else:
+                        res = self._run_measurement(server, client, measurement)
                     self.measurement_results[server][client][measurement] = res
 
         self._print_results()

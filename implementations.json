@@ -1,4 +1,9 @@
 {
+  "my-lsquic": {
+    "image": "janikschoenfelder/master-thesis:lsquic5",
+    "url": "https://github.com/litespeedtech/lsquic",
+    "role": "both"
+  },
   "quic-go": {
     "image": "martenseemann/quic-go-interop:latest",
     "url": "https://github.com/quic-go/quic-go",

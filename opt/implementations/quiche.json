@@ -1,0 +1,50 @@
+{
+  "--cc-algorithm": {
+    "values": ["bbr", "bbr2", "cubic", "reno"],
+    "type": "categorical",
+    "for": "both",
+    "default": "cubic"
+  },
+  "--max-data": {
+    "default": 10000000,
+    "type": "integer",
+    "range": [10000000, 16777216],
+    "for": "both"
+  },
+  "--max-window": {
+    "default": 25165824,
+    "type": "integer",
+    "range": [12582912, 35232153],
+    "for": "both"
+  },
+  "--max-stream-data": {
+    "default": 1000000,
+    "type": "integer",
+    "range": [700000, 2000000],
+    "for": "both"
+  },
+  "--max-stream-window": {
+    "default": 16777216,
+    "type": "integer",
+    "range": [10066329, 23488102],
+    "for": "both"
+  },
+  "--max-streams-bidi": {
+    "default": 100,
+    "type": "integer",
+    "range": [60, 150],
+    "for": "both"
+  },
+  "--max-streams-uni": {
+    "default": 100,
+    "type": "integer",
+    "range": [60, 150],
+    "for": "both"
+  },
+  "--initial-cwnd-packets": {
+    "default": 10,
+    "type": "integer",
+    "range": [5, 20],
+    "for": "both"
+  }
+}
