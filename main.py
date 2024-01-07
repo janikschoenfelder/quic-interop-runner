@@ -136,13 +136,6 @@ quiche_params = {
     },
 }
 
-# class InteropConfig(BaseModel):
-#     name: str
-#     description: str | None = None
-#     price: float
-#     tax: float | None = None
-
-
 implementations = {
     name: {"image": value["image"], "url": value["url"]}
     for name, value in IMPLEMENTATIONS.items()
@@ -170,7 +163,6 @@ def run_interop(job_id):
         ).run()
 
     except Exception as e:
-        # Optional: Fügen Sie Fehlerlogging hier hinzu
         print(f"Error running InteropRunner: {str(e)}")
 
     finally:

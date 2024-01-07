@@ -495,7 +495,6 @@ class InteropRunner:
             separator = "-" * len(table_str.splitlines()[0])
             formatted_test = f"Test #{test['counter']}\n\n{table_str}\nGoodput: {test['goodput']} kbps\n{separator}\n\n"
 
-            # Besten Goodput überprüfen
             if test["goodput"] > best_goodput:
                 best_goodput = test["goodput"]
                 best_test = formatted_test
@@ -524,7 +523,6 @@ class InteropRunner:
         table_str = table.get_string()
         output = f"Test #{counter}\n\n{table_str}\n\nRun took: {test_time}s\nGoodput: {goodput} kbps"
 
-        # Stellt sicher, dass das Verzeichnis existiert
         os.makedirs(log_dir, exist_ok=True)
 
         with open(f"{log_dir}/result.txt", "w") as f:
@@ -568,8 +566,6 @@ class InteropRunner:
         server_cmd,
         client_cmd,
     ):
-        # best_server_cmd, best_client_cmd = params_to_cmd_strings(best_params)
-
         best_test_values = []
         default_test_values = []
 
@@ -616,8 +612,6 @@ class InteropRunner:
     def _run_quic_optimization(
         self, server: str, client: str, test: Callable[[], testcases.Measurement]
     ) -> MeasurementResult:
-        # logging.debug("hallo")
-        # self._run_http2_transfer(test)
         values = []
         counter = 0
         output_tables = []
@@ -675,7 +669,7 @@ class InteropRunner:
             for key, value in best_params.items():
                 cmd, target = key.rsplit(
                     "_", 1
-                )  # Trennt den letzten Teil nach dem Unterstrich ab
+                )
                 if target == "server":
                     if server in ["lsquic", "my-lsquic"]:
                         server_cmds += f" {cmd}={value}"
@@ -695,20 +689,18 @@ class InteropRunner:
         best_params = study.best_params
         # best_value = study.best_value
 
-        # Let optimized params compete against default params
+        # Build best params as cmd string
         best_server_cmd, best_client_cmd = params_to_cmd_strings(best_params)
 
-        # best_server_cmd = "--cc-algorithm bbr --max-data 12829185 --max-window 28916000 --max-stream-data 829907 --max-stream-window 19856250 --max-streams-bidi 86 --max-streams-uni 112 --initial-cwnd-packets 12"
-        # best_client_cmd = "--cc-algorithm bbr --max-data 12469961 --max-window 21366335 --max-stream-data 1339680 --max-stream-window 12553325 --max-streams-bidi 80 --max-streams-uni 81 --initial-cwnd-packets 9"
-
-        # best_server_cmd = "-o cc_algo=1 -o cfcw=40304 -o sfcw=28176 -o init_max_data=13460996 -o max_cfcw=20132659 -o max_sfcw=99181 -o init_max_streams_bidi=94 -o init_max_streams_uni=102"
-        # best_client_cmd = "-o cc_algo=2 -o cfcw=94730 -o sfcw=56260 -o init_max_data=12237770 -o max_cfcw=20132659 -o max_sfcw=110821 -o init_max_streams_bidi=107 -o init_max_streams_uni=95"
-
+        # Let optimized params compete against default params
         best_result, default_result = self._compare_with_default_conf(
             server, client, test, best_server_cmd, best_client_cmd
         )
 
         self._export_quic_optimization(output_tables, best_result, default_result)
+        
+        self._run_http2_transfer(test)
+
         logging.debug(values)
 
         res = MeasurementResult()
@@ -773,6 +765,7 @@ class InteropRunner:
             "--cacert",
             "/certs/cert.pem",
             "https://172.28.1.1/",
+            "-k"
         ]
 
         times = []
@@ -780,10 +773,6 @@ class InteropRunner:
             logging.debug("Curling...")
             result = subprocess.run(curl_command, stdout=subprocess.PIPE, text=True)
             if result.returncode == 0:
-                # Konvertieren Sie die Ausgabe zu float und fügen Sie sie der Liste hinzu
-                # logging.debug("--------")
-                # logging.debug(result.stdout.strip())
-                # logging.debug("--------")
                 time_s = float(result.stdout.strip())
                 time_ms = time_s * 1000
                 goodput_bps = size * unit * 8 / time_s
@@ -819,6 +808,7 @@ class InteropRunner:
         unit = testcases.KB if config.get("filesize_unit") == "KB" else testcases.MB
         bandwidth = int(config["bandwidth"])
         delay = int(config["delay"])
+        
         # generate random file
         FILESIZE = size * unit
         directory = "http2/www/"
@@ -869,7 +859,6 @@ class InteropRunner:
             shell=True,
         )
 
-        # Führe den fetch_file Befehl 5 Mal aus und speichere die Zeiten
         times = self._fetch_file(size, unit, bandwidth, delay)
 
         subprocess.run(
@@ -880,7 +869,7 @@ class InteropRunner:
             timeout=60,
         )
 
-        logging.debug("AND HERE COME... THE TIMES\n")
+        logging.debug("HTTP/2 TIMES\n")
         logging.debug(times)
         logging.debug("-------------------")
 
@@ -903,12 +892,12 @@ class InteropRunner:
                     client,
                     self._implementations[client]["image"],
                 )
-                # if not (
-                #     self._check_impl_is_compliant(server)
-                #     and self._check_impl_is_compliant(client)
-                # ):
-                #     logging.info("Not compliant, skipping")
-                #     continue
+                if not (
+                    self._check_impl_is_compliant(server)
+                    and self._check_impl_is_compliant(client)
+                ):
+                    logging.info("Not compliant, skipping")
+                    continue
 
                 # run the test cases
                 for testcase in self._tests:
@@ -921,7 +910,6 @@ class InteropRunner:
                 for measurement in self._measurements:
                     if measurement.abbreviation() == "QO":
                         res = self._run_quic_optimization(server, client, measurement)
-                        # self._run_http2_transfer()
                     else:
                         res = self._run_measurement(server, client, measurement)
                     self.measurement_results[server][client][measurement] = res

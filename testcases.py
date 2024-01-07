@@ -1667,39 +1667,6 @@ class MeasurementQuicOptimization(MeasurementGoodput):
         return self._files
 
 
-class MeasurementHTTP2(MeasurementGoodput):
-    FILESIZE = 10 * MB
-
-    @staticmethod
-    def name():
-        return "http2-transfer"
-
-    @staticmethod
-    def abbreviation():
-        return "H2"
-
-    @staticmethod
-    def desc():
-        return f"Measures goodput over a {BANDWIDTH}Mbps link using HTTP/2."
-
-    @staticmethod
-    def timeout() -> int:
-        return 180
-
-    @staticmethod
-    def scenario() -> str:
-        """Scenario for the ns3 simulator"""
-        return f"simple-p2p --delay={DELAY}ms --bandwidth={BANDWIDTH}Mbps --queue=25"
-
-    @staticmethod
-    def additional_containers() -> List[str]:
-        return ["apache"]
-
-    def run(self):
-        # Hier den HTTP/2 Request durchführen und die Ergebnisse verarbeiten
-        pass
-
-
 TESTCASES = [
     TestCaseHandshake,
     TestCaseTransfer,
